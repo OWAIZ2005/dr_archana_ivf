@@ -5,6 +5,7 @@ import { useApp, type ScreenId } from '@/lib/store';
 import { PATIENT, PARTNER, MEDICATIONS, PACKAGE, INVESTIGATIONS } from '@/lib/data';
 import { cn, formatINR } from '@/lib/utils';
 import { Card, CardHeader, Badge, Button, SectionTitle, Field, DataRow, InfoNote, ProgressBar, Input } from '@/components/ui/primitives';
+import { CycleTriggerNpoPanel } from '@/components/ivf/CycleTriggerNpoPanel';
 import { PatientHeader } from './Workspace';
 import { useCoupleForPatient } from '@/lib/api/patients';
 import {
@@ -296,6 +297,8 @@ export function Plan() {
               </div>
             </Card>
           )}
+
+          {cycle && <CycleTriggerNpoPanel cycleId={cycle.id} />}
 
           <Card>
             <CardHeader icon={<FlaskConical className="h-4 w-4" />} title="Planned Investigations" subtitle="Baseline workup completed prior to cycle start" />

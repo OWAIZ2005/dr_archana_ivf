@@ -38,6 +38,9 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("clinical.read", "clinical", "View consultations and clinical notes", False),
     ("clinical.write", "clinical", "Create/edit clinical notes", False),
     ("clinical.correct", "clinical", "Issue a correction to a signed clinical record", True),
+    # Nursing — minimal vitals/observations scaffold (full workflow unconfirmed)
+    ("nursing.read", "nursing", "View nursing records / recorded vitals", False),
+    ("nursing.create", "nursing", "Record nursing vitals and observations", False),
     # IVF
     ("ivf.read", "ivf", "View IVF cycle and treatment plan data", False),
     ("ivf.write", "ivf", "Create/edit IVF cycles and treatment plans", False),
@@ -85,8 +88,9 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("accounting.read", "accounting", "View ledger, cash book, GST reports", False),
     ("accounting.write", "accounting", "Post accounting entries", True),
     # Assets
-    ("assets.read", "assets", "View asset register", False),
-    ("assets.move", "assets", "Record an asset movement", False),
+    ("assets.read", "assets", "View asset register and location history", False),
+    ("assets.register", "assets", "Register/edit assets and manage locations", False),
+    ("assets.move", "assets", "Record an official asset location change", False),
     ("assets.delete", "assets", "Retire/delete an asset record", True),
     # Maintenance
     ("maintenance.read", "maintenance", "View maintenance schedule", False),
@@ -124,6 +128,7 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "patients.read", "patients.create", "patients.update", "patients.sensitive_documents",
         "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
         "clinical.read", "clinical.write", "clinical.correct",
+        "nursing.read", "nursing.create",
         "ivf.read", "ivf.write", "ivf.monitoring.write",
         "embryology.read", "embryology.transfer",
         "cryostorage.read",
@@ -136,15 +141,18 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
     "nurse": ("Nurse", [
         "patients.read", "appointments.read", "appointments.checkin",
         "clinical.read", "clinical.write",
+        "nursing.read", "nursing.create",
         "ivf.read", "ivf.monitoring.write",
         "ot.read", "ot.checklist",
         "pharmacy.read",
+        "assets.read",
     ]),
     "receptionist": ("Receptionist", [
         "patients.read", "patients.create", "patients.sensitive_documents",
         "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
         "billing.read", "billing.create", "billing.payment",
         "messaging.send",
+        "assets.read",
     ]),
     "embryologist": ("Embryologist", [
         "patients.read",
@@ -179,7 +187,8 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "hr.read", "hr.approve_leave",
         "reports.read", "reports.export", "reports.generate",
         "audit.read",
-        "maintenance.read", "quality.read", "assets.read",
+        "maintenance.read", "quality.read",
+        "assets.read", "assets.register", "assets.move",
     ]),
     "chief_consultant": ("Chief Consultant", [
         # Everything a doctor has, plus the restricted treatment protocol.
@@ -192,6 +201,7 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "patients.read", "patients.create", "patients.update", "patients.sensitive_documents",
         "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
         "clinical.read", "clinical.write", "clinical.correct",
+        "nursing.read", "nursing.create",
         "ivf.read", "ivf.write", "ivf.monitoring.write", "ivf.protocol.read", "ivf.protocol.write",
         "embryology.read", "embryology.transfer",
         "cryostorage.read",

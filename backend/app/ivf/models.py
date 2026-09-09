@@ -174,3 +174,70 @@ class PregnancyMilestone(Base, UUIDPrimaryKeyMixin):
     milestone_date: Mapped[date] = mapped_column(Date, nullable=False)
     detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_completed: Mapped[bool] = mapped_column(default=True)
+
+
+# ===========================================================================
+# Trigger injection & NPO — hospital-side clinical events that drive internal
+# staff notifications (never patient messages). Kept in the ivf module because
+# both belong to an IVF cycle; deliberately two small tables, no more.
+# ===========================================================================
+
+
+class TriggerStatus(str, enum.Enum):
+    # Lowercase member names so SQLAlchemy's Enum stores the same string the
+    # migration's PG enum defines (matches ReportStatus / MessageStatus).
+    planned = "planned"      # scheduled, not yet actioned
+    confirmed = "confirmed"  # staff confirmed the injection was given
+    overdue = "overdue"      # planned time passed, all reminders sent, still unacknowledged
+
+
+class TriggerInjection(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """One trigger shot per cycle. ``planned_at`` is editable (rescheduling);
+    every change is written to the audit trail and resets the reminder run so
+    notifications follow the NEW time. Reminders go to hospital staff only."""
+    __tablename__ = "trigger_injections"
+
+    cycle_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ivf_cycles.id"), nullable=False, index=True
+    )
+    cycle: Mapped["IVFCycle"] = relationship()
+
+    medicine: Mapped[str] = mapped_column(String(128), nullable=False)  # e.g. "Inj. Ovitrelle 250mcg"
+    planned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+    status: Mapped[TriggerStatus] = mapped_column(
+        Enum(TriggerStatus, name="trigger_status"), nullable=False, default=TriggerStatus.planned, index=True
+    )
+
+    # Acknowledgement (a staff member has seen the reminder and is on it) is the
+    # minimum extra state the 5-minute retry loop needs: reminders stop as soon
+    # as this OR confirmed_at is set. Confirmation is the stronger, final action.
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    # How many reminders have gone out for the CURRENT planned_at. Reset to 0 on
+    # reschedule. The scheduled task stops once this reaches the configured max.
+    reminders_sent: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class NpoWindow(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """The nil-by-mouth window for a cycle's procedure. ``start_at`` is either
+    given directly or computed as (procedure time - configured lead time); the
+    lead time is never hardcoded in clinical logic. Notification is staff-only."""
+    __tablename__ = "npo_windows"
+
+    cycle_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ivf_cycles.id"), nullable=False, index=True
+    )
+    cycle: Mapped["IVFCycle"] = relationship()
+
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g. "Oocyte retrieval under sedation"
+
+    # Set once the "NPO started" staff notification has been generated — the
+    # idempotency guard for that one-shot send.
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

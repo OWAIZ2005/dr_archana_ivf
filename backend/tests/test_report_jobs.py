@@ -99,8 +99,15 @@ async def reader_headers(client: AsyncClient, db_session: AsyncSession, seeded_r
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
-async def _submit(client: AsyncClient, headers: dict, patient_id: str, **opts) -> dict:
-    body = {"report_type": "patient_summary", "parameters": {"patient_id": patient_id}}
+async def _submit(
+    client: AsyncClient,
+    headers: dict,
+    patient_id: str,
+    *,
+    report_type: str = "patient_summary",
+    **opts,
+) -> dict:
+    body = {"report_type": report_type, "parameters": {"patient_id": patient_id}}
     if opts:
         body["options"] = opts
     r = await client.post(BASE, json=body, headers=headers)
@@ -160,6 +167,32 @@ class TestSubmit:
         ).scalar_one()
         assert job.options["simulate_work_seconds"] == 30  # REPORT_SIMULATE_MAX_SECONDS
 
+    async def test_discharge_summary_accepts_and_validates_patient(
+        self, client, admin_headers, sample_patient, enqueued_jobs
+    ):
+        body = await _submit(
+            client, admin_headers, str(sample_patient.id), report_type="discharge_summary"
+        )
+        assert body["status"] == "queued"
+        assert body["report_type"] == "discharge_summary"
+        assert enqueued_jobs == [body["id"]]
+
+        # same guards as patient_summary: patient_id is required and must exist
+        assert (
+            await client.post(
+                BASE,
+                json={"report_type": "discharge_summary", "parameters": {}},
+                headers=admin_headers,
+            )
+        ).status_code == 422
+        assert (
+            await client.post(
+                BASE,
+                json={"report_type": "discharge_summary", "parameters": {"patient_id": UNKNOWN}},
+                headers=admin_headers,
+            )
+        ).status_code == 422
+
 
 class TestWorker:
     async def test_generates_a_correct_artifact(
@@ -197,6 +230,41 @@ class TestWorker:
         assert sample_patient.full_name in text
         assert "Patient Summary Report" in text
         assert "Appointments" in text and "Laboratory" in text
+
+    async def test_generates_a_discharge_summary_pdf(
+        self, client, admin_headers, sample_patient, enqueued_jobs, run_job
+    ):
+        submitted = await _submit(
+            client, admin_headers, str(sample_patient.id), report_type="discharge_summary"
+        )
+
+        terminal = await run_job(UUID(submitted["id"]))
+        assert terminal is ReportStatus.succeeded
+
+        detail = (await client.get(f"{BASE}/{submitted['id']}", headers=admin_headers)).json()
+        assert detail["status"] == "succeeded"
+        assert detail["content_type"] == "application/pdf"
+        assert detail["error"] is None
+
+        result = await client.get(f"{BASE}/{submitted['id']}/result", headers=admin_headers)
+        assert result.status_code == 200
+        assert result.headers["content-type"] == "application/pdf"
+        assert result.headers["content-disposition"].endswith(
+            f'discharge-summary-{submitted["id"]}.pdf"'
+        )
+        assert result.content.startswith(b"%PDF-")
+        assert result.content.rstrip().endswith(b"%%EOF")
+
+        from io import BytesIO
+
+        from pypdf import PdfReader
+
+        text = "\n".join(p.extract_text() or "" for p in PdfReader(BytesIO(result.content)).pages)
+        assert sample_patient.uhid in text
+        assert sample_patient.full_name in text
+        assert "Discharge Summary" in text
+        assert "Diagnosis & Treatment" in text
+        assert "Follow-up & Next Visit" in text
 
     async def test_result_is_409_until_ready(self, client, admin_headers, sample_patient, enqueued_jobs):
         submitted = await _submit(client, admin_headers, str(sample_patient.id))
@@ -317,6 +385,12 @@ class TestConcurrency:
             async with Session() as s:
                 if job_ids:
                     await s.execute(delete(ReportJob).where(ReportJob.id.in_(job_ids)))
+                if user_id is not None:
+                    # A succeeded job pushes an in-app "Report ready" notification
+                    # for the requester — clear it before the user row goes.
+                    from app.notifications.models import Notification
+
+                    await s.execute(delete(Notification).where(Notification.user_id == user_id))
                 if patient_id is not None:
                     await s.execute(delete(Patient).where(Patient.id == patient_id))
                 if user_id is not None:

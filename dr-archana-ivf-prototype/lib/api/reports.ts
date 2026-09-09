@@ -70,7 +70,7 @@ export function useDischargeSummary(patientId: string | null) {
 // the background, and the client polls for status then downloads.
 // ===========================================================================
 
-export type ReportJobType = 'patient_summary';
+export type ReportJobType = 'patient_summary' | 'discharge_summary';
 export type ReportJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 
 export interface ReportJob {

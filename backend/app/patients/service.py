@@ -132,6 +132,38 @@ async def get_couple_for_patient(session: AsyncSession, patient_id: uuid.UUID) -
     return result.scalar_one_or_none()
 
 
+async def get_partner_for_patient(session: AsyncSession, patient_id: uuid.UUID) -> dict | None:
+    """The linked partner of one individual patient, or ``None`` if they have no
+    couple on record. Raises NotFoundError if ``patient_id`` itself is unknown.
+
+    Reuses the existing Couple relationship (female_patient_id / male_patient_id)
+    — no new relationship system. Returns only the partner's own identity; the
+    caller still loads the partner's medical records through the normal
+    per-patient endpoints, gated by the same permissions."""
+    await get_patient(session, patient_id)  # 404 for an invalid patient id
+
+    couple = await get_couple_for_patient(session, patient_id)
+    if couple is None:
+        return None
+
+    # patient_id may arrive as a str from the path; compare as UUID so the
+    # female/male branch is chosen correctly (str != UUID in Python).
+    pid = patient_id if isinstance(patient_id, uuid.UUID) else uuid.UUID(str(patient_id))
+    if couple.female_patient_id == pid:
+        return {
+            "couple_id": couple.id,
+            "patient_role": "female",
+            "partner_role": "male",
+            "partner": couple.male_patient,
+        }
+    return {
+        "couple_id": couple.id,
+        "patient_role": "male",
+        "partner_role": "female",
+        "partner": couple.female_patient,
+    }
+
+
 async def get_mandatory_document_status(session: AsyncSession, patient_id: uuid.UUID) -> dict:
     """New requirement (source doc §4/§35 checklist 1-2): Aadhaar mandatory
     for Indian patients, visa mandatory for international patients."""

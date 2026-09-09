@@ -24,6 +24,15 @@ async def list_appointments(
     return await service.list_appointments_for_day(session, day=day, doctor_id=doctor_id, status=status)
 
 
+@router.get("/by-patient/{patient_id}", response_model=list[AppointmentOut])
+async def list_appointments_by_patient(
+    patient_id: str,
+    session: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("appointments.read")),
+) -> list[AppointmentOut]:
+    return await service.list_appointments_for_patient(session, patient_id)
+
+
 @router.post("", response_model=AppointmentOut, status_code=201)
 async def create_appointment(
     body: AppointmentCreate,

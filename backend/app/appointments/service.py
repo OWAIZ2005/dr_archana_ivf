@@ -40,6 +40,21 @@ async def list_appointments_for_day(
     return list(result.scalars().all())
 
 
+async def list_appointments_for_patient(
+    session: AsyncSession, patient_id: uuid.UUID, *, limit: int = 50
+) -> list[Appointment]:
+    """A patient's appointments, most recent first. Used by clinical screens
+    (e.g. nursing records) to let staff link a record to the visit it was
+    taken during."""
+    result = await session.execute(
+        select(Appointment)
+        .where(Appointment.patient_id == patient_id)
+        .order_by(Appointment.scheduled_at.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 async def transition_status(
     session: AsyncSession,
     appointment_id: uuid.UUID,

@@ -13,6 +13,14 @@ export function useAppointments(day?: string, status?: AppointmentStatus) {
   });
 }
 
+export function usePatientAppointments(patientId: string | null) {
+  return useQuery({
+    queryKey: ['appointments-by-patient', patientId],
+    queryFn: () => apiFetch<AppointmentOut[]>(`/appointments/by-patient/${patientId}`),
+    enabled: !!patientId,
+  });
+}
+
 export function useCreateAppointment() {
   const queryClient = useQueryClient();
   return useMutation({

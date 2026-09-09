@@ -51,33 +51,98 @@ def dispatch_outbox_events() -> int:
     return _run(_dispatch_outbox_events())
 
 
-async def _send_appointment_reminders() -> int:
-    """Per spec §19's exact example: at 5 PM, find tomorrow's critical
-    appointments and create a follow-up task ('Call Patient...') rather
-    than firing an SMS blindly — the task shows up in the front-desk
-    queue and escalates if nobody actions it."""
+async def generate_appointment_reminders(session, *, for_date=None) -> int:
+    """Create a front-desk 'confirm tomorrow's appointment' task for each of
+    ``for_date``'s appointments (spec §19 — a queued task that escalates, not a
+    blind SMS).
+
+    Idempotency guard: an appointment that already has an OPEN reminder task is
+    skipped, so re-running (retry, manual trigger, overlapping beat) never
+    stacks duplicates. Detail text goes through the shared template renderer.
+
+    Session-taking so it is unit-testable; the Celery wrapper supplies a
+    worker session and commits.
+    """
     from app.appointments.models import Appointment
+    from app.messaging.templating import render_body
+    from app.notifications.models import NotificationTask, TaskStatus
     from app.notifications.schemas import TaskCreate
     from app.notifications.service import create_task
 
-    tomorrow = date.today() + timedelta(days=1)
-    async with worker_session_scope() as session:
-        result = await session.execute(
-            select(Appointment).where(func_date_eq(Appointment.scheduled_at, tomorrow))
+    target = for_date or (date.today() + timedelta(days=1))
+    appts = (
+        await session.execute(
+            select(Appointment).where(func_date_eq(Appointment.scheduled_at, target))
         )
-        appts = result.scalars().all()
-        count = 0
-        for appt in appts:
-            await create_task(session, TaskCreate(
-                assigned_to_id=appt.doctor_id,
-                title=f"Confirm tomorrow's appointment",
-                detail=f"{appt.visit_type} at {appt.scheduled_at.strftime('%I:%M %p')}",
-                due_at=datetime.now(timezone.utc) + timedelta(hours=2),
-                related_entity_type="Appointment", related_entity_id=str(appt.id),
-            ))
-            count += 1
+    ).scalars().all()
+
+    existing = set(
+        (
+            await session.execute(
+                select(NotificationTask.related_entity_id).where(
+                    NotificationTask.related_entity_type == "Appointment",
+                    NotificationTask.status == TaskStatus.OPEN,
+                )
+            )
+        ).scalars().all()
+    )
+
+    count = 0
+    for appt in appts:
+        if str(appt.id) in existing:
+            continue  # already has an open reminder task
+        detail = render_body(
+            "Reminder: {{visit_type}} appointment at {{time}} on {{date}}.",
+            {
+                "visit_type": appt.visit_type,
+                "time": appt.scheduled_at.strftime("%I:%M %p"),
+                "date": appt.scheduled_at.strftime("%d %b %Y"),
+            },
+        )
+        await create_task(session, TaskCreate(
+            assigned_to_id=appt.doctor_id,
+            title="Confirm tomorrow's appointment",
+            detail=detail,
+            due_at=datetime.now(timezone.utc) + timedelta(hours=2),
+            related_entity_type="Appointment", related_entity_id=str(appt.id),
+        ))
+        count += 1
+    return count
+
+
+async def _send_appointment_reminders() -> int:
+    async with worker_session_scope() as session:
+        count = await generate_appointment_reminders(session)
         await session.commit()
         return count
+
+
+async def _process_trigger_reminders() -> dict:
+    from app.ivf.trigger_npo_service import process_trigger_reminders
+
+    async with worker_session_scope() as session:
+        result = await process_trigger_reminders(session)
+        await session.commit()
+        return result
+
+
+async def _process_npo_notifications() -> dict:
+    from app.ivf.trigger_npo_service import process_npo_notifications
+
+    async with worker_session_scope() as session:
+        result = await process_npo_notifications(session)
+        await session.commit()
+        return result
+
+
+@celery_app.task(name="app.workers.tasks.process_trigger_reminders")
+def process_trigger_reminders() -> dict:
+    return _run(_process_trigger_reminders())
+
+
+@celery_app.task(name="app.workers.tasks.process_npo_notifications")
+def process_npo_notifications() -> dict:
+    return _run(_process_npo_notifications())
 
 
 def func_date_eq(column, target_date):

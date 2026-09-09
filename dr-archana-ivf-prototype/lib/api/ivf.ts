@@ -224,3 +224,127 @@ export function useAdministerInjection() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['injections'] }),
   });
 }
+
+// ===========================================================================
+// Trigger injection & NPO — hospital-side clinical events. Notifications for
+// these are internal (staff only); the panel shows their status + history.
+// ===========================================================================
+
+export type TriggerStatus = 'planned' | 'confirmed' | 'overdue';
+
+export interface TriggerOut {
+  id: string;
+  cycle_id: string;
+  medicine: string;
+  planned_at: string;
+  status: TriggerStatus;
+  acknowledged_at: string | null;
+  acknowledged_by_id: string | null;
+  confirmed_at: string | null;
+  confirmed_by_id: string | null;
+  reminders_sent: number;
+  last_reminder_at: string | null;
+  created_at: string;
+}
+
+export interface NpoOut {
+  id: string;
+  cycle_id: string;
+  start_at: string;
+  reason: string;
+  notified_at: string | null;
+  created_at: string;
+}
+
+export interface EventMessageOut {
+  id: string;
+  event_type: string | null;
+  event_id: string | null;
+  attempt: number;
+  body: string;
+  channel: string;
+  status: string;
+  provider: string | null;
+  provider_message_id: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export function useCycleTrigger(cycleId: string | null) {
+  return useQuery({
+    queryKey: ['cycle-trigger', cycleId],
+    queryFn: () => apiFetch<TriggerOut | null>(`/ivf/cycles/${cycleId}/trigger`),
+    enabled: !!cycleId,
+  });
+}
+
+export function useTriggerNotifications(triggerId: string | null) {
+  return useQuery({
+    queryKey: ['trigger-notifications', triggerId],
+    queryFn: () => apiFetch<EventMessageOut[]>(`/ivf/triggers/${triggerId}/notifications`),
+    enabled: !!triggerId,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateTrigger() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cycleId, ...body }: { cycleId: string; medicine: string; planned_at: string }) =>
+      apiFetch<TriggerOut>(`/ivf/cycles/${cycleId}/trigger`, { method: 'POST', body }),
+    onSuccess: (_, v) => queryClient.invalidateQueries({ queryKey: ['cycle-trigger', v.cycleId] }),
+  });
+}
+
+export function useRescheduleTrigger() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ triggerId, planned_at }: { triggerId: string; cycleId: string; planned_at: string }) =>
+      apiFetch<TriggerOut>(`/ivf/triggers/${triggerId}`, { method: 'PATCH', body: { planned_at } }),
+    onSuccess: (_, v) => queryClient.invalidateQueries({ queryKey: ['cycle-trigger', v.cycleId] }),
+  });
+}
+
+export function useAcknowledgeTrigger() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ triggerId }: { triggerId: string; cycleId: string }) =>
+      apiFetch<TriggerOut>(`/ivf/triggers/${triggerId}/acknowledge`, { method: 'POST' }),
+    onSuccess: (_, v) => queryClient.invalidateQueries({ queryKey: ['cycle-trigger', v.cycleId] }),
+  });
+}
+
+export function useConfirmTrigger() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ triggerId }: { triggerId: string; cycleId: string }) =>
+      apiFetch<TriggerOut>(`/ivf/triggers/${triggerId}/confirm`, { method: 'POST', body: {} }),
+    onSuccess: (_, v) => queryClient.invalidateQueries({ queryKey: ['cycle-trigger', v.cycleId] }),
+  });
+}
+
+export function useCycleNpo(cycleId: string | null) {
+  return useQuery({
+    queryKey: ['cycle-npo', cycleId],
+    queryFn: () => apiFetch<NpoOut | null>(`/ivf/cycles/${cycleId}/npo`),
+    enabled: !!cycleId,
+  });
+}
+
+export function useNpoNotifications(npoId: string | null) {
+  return useQuery({
+    queryKey: ['npo-notifications', npoId],
+    queryFn: () => apiFetch<EventMessageOut[]>(`/ivf/npo/${npoId}/notifications`),
+    enabled: !!npoId,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useCreateNpo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cycleId, ...body }: { cycleId: string; reason: string; start_at?: string; procedure_at?: string }) =>
+      apiFetch<NpoOut>(`/ivf/cycles/${cycleId}/npo`, { method: 'POST', body }),
+    onSuccess: (_, v) => queryClient.invalidateQueries({ queryKey: ['cycle-npo', v.cycleId] }),
+  });
+}

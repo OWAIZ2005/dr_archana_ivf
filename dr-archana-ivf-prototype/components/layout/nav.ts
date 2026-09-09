@@ -24,6 +24,7 @@ import {
   Settings,
   Dna,
   MessageCircle,
+  QrCode,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -65,6 +66,7 @@ export const NAV: NavItem[] = [
   { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, section: 'Management', roles: ['management', 'doctor'] },
   { id: 'access', label: 'Role & Access', icon: ShieldCheck, section: 'Management', roles: ['doctor', 'receptionist', 'embryologist', 'management'] },
   { id: 'audit', label: 'Audit Log', icon: ScrollText, section: 'Management', roles: ['doctor', 'management'] },
+  { id: 'assets', label: 'Asset & Item Tracking', icon: QrCode, section: 'Management', roles: ['management'] },
   { id: 'administration', label: 'Administration', icon: Settings, section: 'Management', roles: ['management'] },
 ];
 
@@ -124,5 +126,6 @@ export const SCREEN_TITLES: Record<ScreenId, string> = {
   administration: 'System Administration',
   donors: 'Donor Management',
   messaging: 'Patient Messaging',
+  assets: 'Asset & Item Tracking',
   settings: 'User Interface Settings',
 };

@@ -8,6 +8,7 @@ from app.patients.schemas import (
     CoupleCreate,
     CoupleOut,
     MandatoryDocumentStatus,
+    PartnerOut,
     PatientListRow,
     PatientSummary,
     PatientUpdate,
@@ -36,6 +37,18 @@ async def get_patient_summary(
     _: User = Depends(require_permission("patients.read")),
 ) -> PatientSummary:
     return await service.get_patient(session, patient_id)
+
+
+@router.get("/{patient_id}/partner", response_model=PartnerOut | None)
+async def get_patient_partner(
+    patient_id: str,
+    session: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("patients.read")),
+) -> PartnerOut | None:
+    """The linked partner of one individual patient, for the "View Partner"
+    navigation. ``null`` when the patient has no couple on record. Same
+    ``patients.read`` gate as viewing any patient's chart."""
+    return await service.get_partner_for_patient(session, patient_id)
 
 
 @router.patch("/{patient_id}", response_model=PatientSummary)

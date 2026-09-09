@@ -12,6 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.core.types import UtcDatetime
 from app.reports.job_models import ReportStatus, ReportType
 
+# Every report type shipped so far is scoped to a single patient and takes
+# ``parameters.patient_id``.
+PATIENT_SCOPED_REPORTS = frozenset(
+    {ReportType.patient_summary, ReportType.discharge_summary}
+)
+
 
 class ReportOptions(BaseModel):
     """Non-domain knobs. Never changes the report's content."""
@@ -32,12 +38,12 @@ class ReportRequest(BaseModel):
     options: ReportOptions = Field(default_factory=ReportOptions)
 
     @model_validator(mode="after")
-    def _require_patient_id_for_patient_summary(self) -> "ReportRequest":
-        if self.report_type is ReportType.patient_summary:
+    def _require_patient_id(self) -> "ReportRequest":
+        if self.report_type in PATIENT_SCOPED_REPORTS:
             patient_id = self.parameters.get("patient_id")
             if not patient_id:
                 raise ValueError(
-                    "parameters.patient_id is required for a patient_summary report."
+                    f"parameters.patient_id is required for a {self.report_type.value} report."
                 )
             try:
                 UUID(str(patient_id))

@@ -52,6 +52,14 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.send_appointment_reminders",
         "schedule": crontab(hour=17, minute=0),  # 5 PM daily, per spec §19's example
     },
+    "trigger-injection-reminders": {
+        "task": "app.workers.tasks.process_trigger_reminders",
+        "schedule": 60.0,  # every minute — drives the T, T+5, T+10 staff reminders
+    },
+    "npo-window-notifications": {
+        "task": "app.workers.tasks.process_npo_notifications",
+        "schedule": 60.0,  # every minute — fires the one-shot "NPO started" notice
+    },
     "generate-daily-checklists": {
         "task": "app.workers.tasks.generate_daily_readiness_checklists",
         "schedule": crontab(hour=6, minute=0),  # before the clinic opens

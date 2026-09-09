@@ -13,7 +13,14 @@ import {
   useReportJob,
   useSubmitReportJob,
   type ReportJobStatus,
+  type ReportJobType,
 } from '@/lib/api/reports';
+
+/** The report types the async pipeline can produce, with their download slug. */
+const REPORT_TYPES: { value: ReportJobType; label: string; slug: string }[] = [
+  { value: 'patient_summary', label: 'Patient Summary', slug: 'patient-summary' },
+  { value: 'discharge_summary', label: 'Discharge Summary', slug: 'discharge-summary' },
+];
 
 /** Lifecycle labels + design-system tone for each async report-job state. */
 const STATE: Record<
@@ -39,6 +46,7 @@ export function PatientReportCard() {
   const patients = usePatients();
   const submit = useSubmitReportJob();
 
+  const [reportType, setReportType] = useState<ReportJobType>('patient_summary');
   const [patientId, setPatientId] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +65,7 @@ export function PatientReportCard() {
       return;
     }
     submit.mutate(
-      { report_type: 'patient_summary', parameters: { patient_id: patientId } },
+      { report_type: reportType, parameters: { patient_id: patientId } },
       {
         onSuccess: (created) => {
           // Seed the poll query with the freshly-queued job so the lifecycle
@@ -78,9 +86,12 @@ export function PatientReportCard() {
     try {
       const blob = await fetchReportJobResult(jobId);
       const url = URL.createObjectURL(blob);
+      const slug =
+        REPORT_TYPES.find((t) => t.value === (job.data?.report_type ?? reportType))?.slug ??
+        'patient-summary';
       const a = document.createElement('a');
       a.href = url;
-      a.download = `patient-summary-${jobId}.pdf`;
+      a.download = `${slug}-${jobId}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -105,6 +116,25 @@ export function PatientReportCard() {
         subtitle="Generate a detailed report from the patient's available clinical records."
       />
       <div className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:flex-wrap sm:items-end">
+        <div className="sm:w-56">
+          <Select
+            label="Report type"
+            value={reportType}
+            disabled={inFlight}
+            onChange={(e) => {
+              setReportType(e.target.value as ReportJobType);
+              setJobId(null);
+              setError(null);
+            }}
+          >
+            {REPORT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
         <div className="sm:w-72">
           <Select
             label="Patient"

@@ -254,6 +254,225 @@ async def generate_patient_summary(
     return bytes(out), "application/pdf"
 
 
+class _DischargeSummaryPDF(FPDF):
+    """A4 discharge summary with the same repeating chrome as the patient
+    summary (kept as its own class so changes here can't regress the verified
+    patient-summary layout)."""
+
+    def __init__(self) -> None:
+        super().__init__(orientation="P", unit="mm", format="A4")
+        self.set_margins(15, 16, 15)
+        self.set_auto_page_break(auto=True, margin=18)
+        self.set_title("Discharge Summary")
+
+    def header(self) -> None:
+        self.set_fill_color(*_BRAND)
+        self.set_text_color(255, 255, 255)
+        self.set_font("Helvetica", "B", 13)
+        self.cell(0, 10, "  Dr. Archana IVF & Women Centre", new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+        self.set_font("Helvetica", "", 9)
+        self.cell(0, 6, "  Discharge Summary", new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+        self.set_text_color(0, 0, 0)
+        self.ln(4)
+
+    def footer(self) -> None:
+        self.set_y(-15)
+        self.set_font("Helvetica", "", 8)
+        self.set_text_color(120, 120, 120)
+        self.cell(
+            0, 8,
+            f"Confidential clinical document  -  generated {_fmt_dt(datetime.now(timezone.utc))}  -  "
+            f"Page {self.page_no()}/{{nb}}",
+            align="C",
+        )
+        self.set_text_color(0, 0, 0)
+
+    def section(self, title: str) -> None:
+        self.ln(2)
+        self.set_font("Helvetica", "B", 11)
+        self.set_fill_color(*_HEADING_FILL)
+        self.cell(0, 8, f"  {_safe(title)}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, fill=True)
+        self.ln(1.5)
+
+    def kv(self, label: str, value: Any) -> None:
+        self.set_font("Helvetica", "B", 9.5)
+        self.cell(50, 6, _safe(label), new_x=XPos.RIGHT, new_y=YPos.TOP)
+        self.set_font("Helvetica", "", 9.5)
+        self.multi_cell(0, 6, _safe(value) or "-", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    def note(self, text: str) -> None:
+        self.set_font("Helvetica", "I", 9)
+        self.set_text_color(110, 110, 110)
+        self.multi_cell(0, 5, _safe(text), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.set_text_color(0, 0, 0)
+
+    def simple_table(self, headings: list[str], rows: list[list[Any]], col_widths: tuple[int, ...]) -> None:
+        with self.table(
+            width=sum(col_widths),
+            col_widths=col_widths,
+            line_height=5.5,
+            headings_style=FontFace(emphasis="BOLD", fill_color=_HEADING_FILL),
+            cell_fill_color=_ROW_ALT,
+            cell_fill_mode="ROWS",
+            text_align=tuple("LEFT" for _ in col_widths),
+            first_row_as_headings=True,
+        ) as table:
+            table.row([_safe(h) for h in headings])
+            for r in rows:
+                table.row([_safe(c) for c in r])
+
+
+async def generate_discharge_summary(
+    session: AsyncSession, parameters: dict[str, Any]
+) -> tuple[bytes, str]:
+    """A structured discharge summary PDF for one patient - diagnosis/treatment
+    context, everything done during care, and follow-up. Every value is a direct
+    read of an existing record via ``reports.service.discharge_summary``; nothing
+    clinical is generated or inferred here. The follow-up wording is a
+    placeholder until the clinic's discharge template is supplied - the data
+    model and pipeline do not depend on it."""
+    from app.core.exceptions import NotFoundError
+    from app.reports import service as analytics
+
+    patient_id = UUID(str(parameters["patient_id"]))
+    try:
+        data = await analytics.discharge_summary(session, patient_id)
+    except NotFoundError as exc:
+        raise ReportGenerationError("The patient no longer exists.") from exc
+
+    p = data["patient"]
+    couple = data["couple"]
+
+    pdf = _DischargeSummaryPDF()
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(90, 90, 90)
+    pdf.cell(
+        0, 5, f"Generated {_fmt_dt(datetime.now(timezone.utc))}",
+        new_x=XPos.LMARGIN, new_y=YPos.NEXT,
+    )
+    pdf.set_text_color(0, 0, 0)
+
+    pdf.section("Patient Information")
+    pdf.kv("UHID", p["uhid"])
+    pdf.kv("Full name", p["full_name"])
+    pdf.kv("Date of birth", _fmt_date(p["date_of_birth"]))
+    pdf.kv("Partner", couple["partner_name"] if couple else "-")
+
+    pdf.section("Diagnosis & Treatment")
+    cycles = data["cycles"]
+    if cycles:
+        for c in cycles:
+            pdf.kv(
+                f"Cycle {c['cycle_number']}",
+                f"{c['treatment']}  |  protocol {c['protocol']}  |  stage {c['stage']}"
+                f"  |  started {_fmt_date(c['started_at'])}",
+            )
+    else:
+        pdf.note("No IVF treatment cycle on record for this patient.")
+
+    pdf.section("Consultations")
+    rows = [[_fmt_date(c["date"]), c["type"], c["notes"]] for c in data["consultations"]]
+    if rows:
+        pdf.simple_table(["Date", "Type", "Notes"], rows, (28, 40, 112))
+    else:
+        pdf.note("No consultations on record.")
+
+    pdf.section("Investigations")
+    rows = [[_fmt_date(i["date"]), i["test_name"], i["status"]] for i in data["investigations"]]
+    if rows:
+        pdf.simple_table(["Date", "Test", "Status"], rows, (28, 110, 42))
+    else:
+        pdf.note("No investigations on record.")
+
+    pdf.section("Prescriptions")
+    rows = [
+        [_fmt_date(r["date"]), r["category"] or "-", str(r["line_count"])]
+        for r in data["prescriptions"]
+    ]
+    if rows:
+        pdf.simple_table(["Date", "Category", "Items"], rows, (28, 110, 42))
+    else:
+        pdf.note("No prescriptions on record.")
+
+    pdf.section("Monitoring Visits")
+    rows = [
+        [_fmt_date(m["date"]), str(m["cycle_day"]), f"{m['endometrium_mm']:.1f}", m["doctor_note"] or "-"]
+        for m in data["monitoring_visits"]
+    ]
+    if rows:
+        pdf.simple_table(["Date", "Cycle day", "Endo (mm)", "Note"], rows, (28, 22, 24, 106))
+    else:
+        pdf.note("No monitoring visits on record.")
+
+    pdf.section("Injections")
+    rows = [
+        [_fmt_date(i["administered_at"]), i["medicine_name"], i["dose"], i["status"]]
+        for i in data["injections"]
+    ]
+    if rows:
+        pdf.simple_table(["Administered", "Medicine", "Dose", "Status"], rows, (32, 66, 40, 42))
+    else:
+        pdf.note("No injections on record.")
+
+    pdf.section("Oocytes & Embryology")
+    oa = data["oocyte_assessments"]
+    if oa:
+        a = oa[0]
+        pdf.kv("Retrieval date", _fmt_date(a["retrieval_date"]))
+        pdf.kv("Oocytes retrieved", a["oocytes_retrieved"])
+        pdf.kv("Mature oocytes", a["mature_oocytes"])
+        pdf.kv("Normally fertilised", a["normally_fertilised"])
+    else:
+        pdf.note("No oocyte retrieval on record.")
+    emb = [[e["label"], str(e["day"]), e["grade"], e["status"]] for e in data["embryos"]]
+    if emb:
+        pdf.ln(1)
+        pdf.simple_table(["Embryo", "Day", "Grade", "Status"], emb, (50, 22, 40, 68))
+
+    pdf.section("Embryo Transfers")
+    rows = [
+        [_fmt_date(t["transfer_date"]), "Completed" if t["completed"] else "Not completed"]
+        for t in data["embryo_transfers"]
+    ]
+    if rows:
+        pdf.simple_table(["Date", "Status"], rows, (40, 140))
+    else:
+        pdf.note("No embryo transfers on record.")
+
+    pdf.section("Current Cryostorage")
+    storage = data["current_storage"]
+    if storage:
+        for s in storage:
+            pdf.kv("Location", s["address"])
+    else:
+        pdf.note("No embryos currently in storage.")
+
+    pdf.section("Pregnancy Outcome")
+    outcomes = data["pregnancy_outcomes"]
+    if outcomes:
+        for o in outcomes:
+            pdf.kv("Outcome", o["outcome"])
+            pdf.kv("Transfer date", _fmt_date(o["transfer_date"]))
+            pdf.kv("Estimated due date", _fmt_date(o["estimated_due_date"]))
+    else:
+        pdf.note("No pregnancy outcome recorded.")
+
+    pdf.section("Follow-up & Next Visit")
+    pdf.note(
+        "Placeholder wording - replace with the clinic's approved discharge "
+        "template once available. The fields below are not auto-generated from "
+        "clinical data."
+    )
+    pdf.kv("Follow-up instructions", "As per the latest consultation notes above.")
+    pdf.kv("Next visit", "As advised by the treating consultant.")
+
+    out = pdf.output()
+    return bytes(out), "application/pdf"
+
+
 REPORT_GENERATORS: dict[ReportType, Generator] = {
     ReportType.patient_summary: generate_patient_summary,
+    ReportType.discharge_summary: generate_discharge_summary,
 }

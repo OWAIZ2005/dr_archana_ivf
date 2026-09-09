@@ -18,8 +18,10 @@ import { usePatientConsultations } from '@/lib/api/clinical';
 import { useLabOrders, type LabOrderStatus } from '@/lib/api/laboratory';
 import { useActiveCycle } from '@/lib/api/ivf';
 import { useInvoices } from '@/lib/api/billing';
-import { usePrescriptions, useCreatePrescription, type PrescriptionLineCreate } from '@/lib/api/prescription';
+import { usePrescriptions, useCreatePrescription, openPrescriptionPdf, type PrescriptionLineCreate } from '@/lib/api/prescription';
 import { useConsentForms, useCreateConsentForm, useSignConsentForm, useMRDRecords, useCreateMRDRecord } from '@/lib/api/clinicalDocuments';
+import { useNursingRecords, useCreateNursingRecord } from '@/lib/api/nursing';
+import { usePatientAppointments } from '@/lib/api/appointments';
 import { ApiError } from '@/lib/api/client';
 import { cn, TONE, formatINR, ageFromDOB, initialsOf } from '@/lib/utils';
 import {
@@ -100,7 +102,7 @@ const LAB_STATUS_TONE: Record<LabOrderStatus, keyof typeof TONE> = {
    continuity of that one demo story.
    ============================================================ */
 export function PatientHeader({ compact }: { compact?: boolean }) {
-  const { go, selectedPatientId } = useApp();
+  const { go, openPatient, selectedPatientId } = useApp();
   const summaryQuery = usePatientSummary(selectedPatientId);
   const coupleQuery = useCoupleForPatient(selectedPatientId);
 
@@ -175,15 +177,16 @@ export function PatientHeader({ compact }: { compact?: boolean }) {
               )}
             </div>
 
-            {/* Couple linkage — deliberately prominent */}
+            {/* Couple linkage — deliberately prominent. Each partner is still an
+                individual patient record; this only navigates between them. */}
             {partner && (
-              <div className="mt-3.5 inline-flex items-center gap-3 rounded-xl border border-brand-200/70 bg-brand-50/60 py-2 pl-2 pr-4">
+              <div className="mt-3.5 inline-flex flex-wrap items-center gap-3 rounded-xl border border-brand-200/70 bg-brand-50/60 py-2 pl-2 pr-3">
                 <Avatar initials={initialsOf(partner.full_name)} size="sm" gradient="from-sky-500 to-blue-600" />
                 <div>
                   <div className="flex items-center gap-1.5">
                     <Link2 className="h-3 w-3 text-brand-600" />
                     <span className="text-[12px] font-semibold uppercase tracking-[0.08em] text-brand-700">
-                      Linked Treatment Couple
+                      Linked Partner
                     </span>
                   </div>
                   <p className="mt-0.5 text-[14px] font-medium text-ink-900">
@@ -192,6 +195,14 @@ export function PatientHeader({ compact }: { compact?: boolean }) {
                     <span className="tnum ml-2 text-[12.5px] font-normal text-ink-500">{partner.uhid}</span>
                   </p>
                 </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  iconRight={<ChevronRight className="h-3.5 w-3.5" />}
+                  onClick={() => openPatient(partner.id)}
+                >
+                  View Partner
+                </Button>
               </div>
             )}
           </div>
@@ -401,6 +412,112 @@ function NewConsentFormModal({ patientId, open, onClose }: { patientId: string |
 }
 
 /* ============================================================
+   ADD NURSING RECORD MODAL
+   ============================================================ */
+function AddNursingRecordModal({ patientId, open, onClose }: { patientId: string | null; open: boolean; onClose: () => void }) {
+  const [systolic, setSystolic] = useState('');
+  const [diastolic, setDiastolic] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [notes, setNotes] = useState('');
+  const [appointmentId, setAppointmentId] = useState('');
+  const createRecord = useCreateNursingRecord();
+  const appointmentsQuery = usePatientAppointments(open ? patientId : null);
+
+  const reset = () => {
+    setSystolic('');
+    setDiastolic('');
+    setTemperature('');
+    setNotes('');
+    setAppointmentId('');
+    createRecord.reset();
+  };
+  const close = () => { reset(); onClose(); };
+
+  const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
+  const hasAny =
+    systolic.trim() !== '' || diastolic.trim() !== '' || temperature.trim() !== '' || notes.trim() !== '';
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="Add Nursing Record"
+      subtitle="Vitals and observations for this patient. Patient, nurse and time are recorded automatically."
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          {createRecord.isError && (
+            <p className="text-[13px] text-rose-600">
+              {createRecord.error instanceof ApiError ? createRecord.error.message : 'Failed to save nursing record.'}
+            </p>
+          )}
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" onClick={close}>Cancel</Button>
+            <Button
+              variant="primary"
+              disabled={!patientId || !hasAny || createRecord.isPending}
+              loading={createRecord.isPending}
+              onClick={() => {
+                if (!patientId) return;
+                createRecord.mutate(
+                  {
+                    patient_id: patientId,
+                    appointment_id: appointmentId || null,
+                    blood_pressure_systolic: numOrNull(systolic),
+                    blood_pressure_diastolic: numOrNull(diastolic),
+                    temperature: numOrNull(temperature),
+                    notes: notes.trim() || null,
+                  },
+                  { onSuccess: close }
+                );
+              }}
+            >
+              Save Record
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {(appointmentsQuery.data ?? []).length > 0 && (
+          <Select label="Visit (optional)" value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)}>
+            <option value="">— Not linked to a visit —</option>
+            {(appointmentsQuery.data ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {new Date(a.scheduled_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · {a.visit_type}
+              </option>
+            ))}
+          </Select>
+        )}
+
+        <div>
+          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Blood Pressure</span>
+          <div className="flex items-center gap-2">
+            <Input type="number" inputMode="numeric" placeholder="Systolic" value={systolic} onChange={(e) => setSystolic(e.target.value)} className="w-28" />
+            <span className="text-ink-400">/</span>
+            <Input type="number" inputMode="numeric" placeholder="Diastolic" value={diastolic} onChange={(e) => setDiastolic(e.target.value)} className="w-28" />
+            <span className="text-[13px] text-ink-500">mmHg</span>
+          </div>
+        </div>
+
+        <div className="sm:w-56">
+          <Input label="Temperature" type="number" inputMode="decimal" placeholder="e.g. 98.4" hint="degF" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
+        </div>
+
+        <label className="block">
+          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Notes</span>
+          <textarea
+            className="min-h-[110px] w-full rounded-lg border border-ink-200 bg-white p-3 text-[14px] text-ink-900"
+            placeholder="Observations, patient comfort, complaints…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+/* ============================================================
    NEW MRD RECORD MODAL
    ============================================================ */
 function NewMRDRecordModal({ patientId, open, onClose }: { patientId: string | null; open: boolean; onClose: () => void }) {
@@ -522,9 +639,11 @@ export function Workspace() {
   const prescriptionsQuery = usePrescriptions(selectedPatientId);
   const consentFormsQuery = useConsentForms(selectedPatientId);
   const mrdRecordsQuery = useMRDRecords(selectedPatientId);
+  const nursingRecordsQuery = useNursingRecords(selectedPatientId);
   const [writePrescriptionOpen, setWritePrescriptionOpen] = useState(false);
   const [newConsentOpen, setNewConsentOpen] = useState(false);
   const [newMrdOpen, setNewMrdOpen] = useState(false);
+  const [newNursingOpen, setNewNursingOpen] = useState(false);
 
   const hasRealConsultations = (consultationsQuery.data ?? []).length > 0;
   const realConsultations = useMemo(
@@ -587,6 +706,7 @@ export function Workspace() {
     { id: 'summary', label: 'Clinical Summary' },
     { id: 'timeline', label: 'Timeline' },
     { id: 'consultations', label: 'Consultations', count: consultations.length },
+    { id: 'nursing', label: 'Nursing', count: (nursingRecordsQuery.data ?? []).length },
     { id: 'investigations', label: 'Investigations', count: hasRealInvestigations ? realInvestigations.length : INVESTIGATIONS.length },
     { id: 'cycle', label: 'IVF Cycle' },
     { id: 'prescriptions', label: 'Prescriptions', count: (prescriptionsQuery.data ?? []).length || medications.length },
@@ -599,6 +719,7 @@ export function Workspace() {
       <WritePrescriptionModal patientId={selectedPatientId} open={writePrescriptionOpen} onClose={() => setWritePrescriptionOpen(false)} />
       <NewConsentFormModal patientId={selectedPatientId} open={newConsentOpen} onClose={() => setNewConsentOpen(false)} />
       <NewMRDRecordModal patientId={selectedPatientId} open={newMrdOpen} onClose={() => setNewMrdOpen(false)} />
+      <AddNursingRecordModal patientId={selectedPatientId} open={newNursingOpen} onClose={() => setNewNursingOpen(false)} />
       <PatientHeader />
 
       <Card className="overflow-hidden">
@@ -854,6 +975,66 @@ export function Workspace() {
             </div>
           )}
 
+          {/* ---------------- NURSING ---------------- */}
+          {tab === 'nursing' && (
+            <div className="animate-fade-up space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] text-ink-500">Vitals and observations recorded by nursing staff.</p>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={<Activity className="h-4 w-4" />}
+                  disabled={!selectedPatientId}
+                  onClick={() => setNewNursingOpen(true)}
+                >
+                  Add Nursing Record
+                </Button>
+              </div>
+
+              {(nursingRecordsQuery.data ?? []).length === 0 ? (
+                <p className="px-1 py-8 text-center text-[14px] text-ink-500">No nursing records yet for this patient.</p>
+              ) : (
+                <div className="stagger space-y-3">
+                  {(nursingRecordsQuery.data ?? []).map((r, i) => (
+                    <Card key={r.id} style={{ ['--i' as string]: i }} className="p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="tnum text-[13px] font-semibold text-ink-600">
+                          {new Date(r.recorded_at).toLocaleString('en-IN', {
+                            day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                          })}
+                        </p>
+                        <p className="text-[12.5px] text-ink-500">Recorded by: {r.recorded_by_name ?? '—'}</p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-8 gap-y-1.5 text-[13.5px]">
+                        {(r.blood_pressure_systolic != null || r.blood_pressure_diastolic != null) && (
+                          <span>
+                            <span className="text-ink-500">BP: </span>
+                            <span className="tnum font-semibold text-ink-900">
+                              {r.blood_pressure_systolic ?? '—'}/{r.blood_pressure_diastolic ?? '—'}
+                            </span>
+                            <span className="text-ink-400"> mmHg</span>
+                          </span>
+                        )}
+                        {r.temperature != null && (
+                          <span>
+                            <span className="text-ink-500">Temperature: </span>
+                            <span className="tnum font-semibold text-ink-900">{r.temperature}</span>
+                            <span className="text-ink-400"> °F</span>
+                          </span>
+                        )}
+                      </div>
+                      {r.notes && (
+                        <p className="mt-2 border-l-2 border-brand-200 pl-3 text-[13.5px] leading-relaxed text-ink-600">
+                          {r.notes}
+                        </p>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ---------------- INVESTIGATIONS ---------------- */}
           {tab === 'investigations' && (
             <div className="animate-fade-up">
@@ -962,6 +1143,18 @@ export function Workspace() {
                           {new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                           {p.category && <span className="text-ink-400"> · {p.category}</span>}
                         </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={<Printer className="h-3.5 w-3.5" />}
+                          onClick={() =>
+                            openPrescriptionPdf(p.id).catch(() =>
+                              toast({ title: 'Could not open the prescription PDF', tone: 'error' })
+                            )
+                          }
+                        >
+                          Print Prescription
+                        </Button>
                       </div>
                       <div className="mt-3 space-y-2">
                         {p.lines.map((l) => (

@@ -13,6 +13,11 @@ class UserSummary(BaseModel):
     department: str | None
     is_active: bool
     role_code: str
+    # Flat list of permission codes the user's role grants. Populated by
+    # GET /auth/me so the frontend can hide (never authorize — the backend
+    # still enforces) capabilities the user lacks, e.g. the asset "Move"
+    # action. Other UserSummary producers leave it empty.
+    permissions: list[str] = []
 
 
 class UserCreate(BaseModel):

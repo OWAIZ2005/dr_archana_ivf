@@ -22,6 +22,10 @@ export interface UserSummary {
   department: string | null;
   is_active: boolean;
   role_code: string;
+  /** Permission codes the user's role grants (from GET /auth/me). Used to
+   * hide capabilities the user lacks — the backend still enforces every
+   * action. Absent when the summary comes from an endpoint that omits it. */
+  permissions?: string[];
 }
 
 // ---- patients -----------------------------------------------------------

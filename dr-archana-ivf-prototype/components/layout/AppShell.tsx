@@ -37,6 +37,7 @@ import { Audit } from '@/components/screens/Audit';
 import { Administration } from '@/components/screens/Administration';
 import { Donors } from '@/components/screens/Donors';
 import { Messaging } from '@/components/screens/Messaging';
+import { AssetTracking } from '@/components/screens/AssetTracking';
 import { Settings } from '@/components/screens/Settings';
 
 import { Lock, ArrowLeft } from 'lucide-react';
@@ -66,9 +67,13 @@ function Restricted() {
 }
 
 function ScreenRouter() {
-  const { screen, role } = useApp();
+  const { screen, role, scanMode } = useApp();
   if (!role) return null;
-  if (!canAccess(role, screen)) return <Restricted />;
+  // A QR scan can bring any signed-in user to the asset scan page regardless
+  // of the sidebar's role map — the page and its APIs still enforce
+  // `assets.read` / `assets.move` on the backend.
+  const scanBypass = screen === 'assets' && scanMode;
+  if (!scanBypass && !canAccess(role, screen)) return <Restricted />;
 
   switch (screen) {
     case 'dashboard':
@@ -119,6 +124,8 @@ function ScreenRouter() {
       return <Donors />;
     case 'messaging':
       return <Messaging />;
+    case 'assets':
+      return <AssetTracking />;
     case 'settings':
       return <Settings />;
     default:

@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     # ---- CORS (frontend origin, LAN only) ----
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://hmis.archanaivf.in"]
 
+    # ---- Asset QR ----
+    # Server-side fallback for the base URL encoded in a printed asset QR
+    # (``<base>/#scan=<opaque-token>``). Normally the frontend passes its own
+    # ``NEXT_PUBLIC_APP_URL`` as the ``?base=`` query param; this is only used
+    # when that is absent. Empty => the QR encodes the bare opaque token
+    # (still resolvable via manual entry). No IP/hostname is hardcoded here.
+    ASSET_QR_BASE_URL: str = ""
+
     # ---- Uploads ----
     MAX_UPLOAD_SIZE_MB: int = 25
     ALLOWED_UPLOAD_MIME_TYPES: list[str] = [
@@ -89,6 +97,34 @@ class Settings(BaseSettings):
     # unit-test suite sets this so it can drive enqueue -> generate -> status
     # without a running broker or worker. Never enabled in real runs.
     CELERY_TASK_ALWAYS_EAGER: bool = False
+
+    # ---- Messaging / notifications ----
+    # Which MessageProvider app/messaging/providers.py::get_provider() returns.
+    # "console" is a safe no-op that logs instead of sending — the only provider
+    # wired up. Set "msg91" later (with the credentials below) to send real
+    # SMS/WhatsApp; no notification workflow changes when you do.
+    MESSAGE_PROVIDER: Literal["console", "msg91"] = "console"
+    # MSG91 credentials — read from the environment only, never committed.
+    # Unused while MESSAGE_PROVIDER="console". Fill these in the environment when
+    # the MSG91 account exists; the provider skeleton in providers.py reads them.
+    MSG91_AUTH_KEY: str | None = None
+    MSG91_SENDER_ID: str | None = None
+    MSG91_SMS_TEMPLATE_ID: str | None = None
+    MSG91_WHATSAPP_NUMBER: str | None = None
+    MSG91_BASE_URL: str = "https://control.msg91.com/api"
+
+    # Trigger-injection reminder schedule (hospital staff only — never patients).
+    # First reminder fires at the planned trigger time; then every
+    # TRIGGER_REMINDER_INTERVAL_MINUTES until TRIGGER_REMINDER_MAX_ATTEMPTS is
+    # reached, after which the trigger is marked OVERDUE and no more are sent.
+    TRIGGER_REMINDER_INTERVAL_MINUTES: int = 5
+    TRIGGER_REMINDER_MAX_ATTEMPTS: int = 3
+
+    # NPO (nil-by-mouth) lead time in minutes: NPO start = procedure time minus
+    # this. There is NO clinically safe default here — this placeholder exists
+    # only so the demo runs; the hospital must set the real value in the
+    # environment. Clinical logic reads it from config, never hardcodes it.
+    NPO_LEAD_TIME_MINUTES: int = 360
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod

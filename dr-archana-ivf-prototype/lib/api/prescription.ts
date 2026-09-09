@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from './client';
+import { apiFetch, apiFetchBlob } from './client';
 
 export interface PrescriptionLineOut {
   id: string;
@@ -39,6 +39,18 @@ export function usePrescriptions(patientId: string | null) {
     queryFn: () => apiFetch<PrescriptionOut[]>(`/prescriptions/by-patient/${patientId}`),
     enabled: !!patientId,
   });
+}
+
+/**
+ * Fetch a saved prescription's PDF and open it in a new tab for the doctor to
+ * print or hand to the patient. Reuses the app's authenticated binary GET
+ * (same pattern as report/lab-document downloads).
+ */
+export async function openPrescriptionPdf(prescriptionId: string): Promise<void> {
+  const blob = await apiFetchBlob(`/prescriptions/${prescriptionId}/pdf`);
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function useCreatePrescription() {

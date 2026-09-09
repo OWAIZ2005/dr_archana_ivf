@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -26,6 +27,27 @@ async def get_prescription(
     _: User = Depends(require_permission("clinical.read")),
 ) -> PrescriptionOut:
     return await service.get_prescription(session, prescription_id)
+
+
+@router.get("/{prescription_id}/pdf")
+async def get_prescription_pdf(
+    prescription_id: str,
+    session: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("clinical.read")),
+) -> StreamingResponse:
+    """Printable PDF of an already-saved prescription. Same ``clinical.read``
+    gate as viewing the prescription; read-only, no mutation. Served
+    ``inline`` so the browser opens it in a printable view."""
+    pdf_bytes, filename = await service.build_prescription_pdf(session, prescription_id)
+
+    def _iter():
+        yield pdf_bytes
+
+    return StreamingResponse(
+        _iter(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.get("/by-patient/{patient_id}", response_model=list[PrescriptionOut])

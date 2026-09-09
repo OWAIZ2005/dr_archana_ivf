@@ -114,6 +114,7 @@ async def me(user: User = Depends(get_current_user)) -> UserSummary:
         department=user.department,
         is_active=user.is_active,
         role_code=user.role.code,
+        permissions=sorted({p.code for p in user.role.permissions}),
     )
 
 

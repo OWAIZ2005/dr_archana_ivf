@@ -33,6 +33,7 @@ from app.core.database import Base
 
 class ReportType(str, enum.Enum):
     patient_summary = "patient_summary"
+    discharge_summary = "discharge_summary"
 
 
 class ReportStatus(str, enum.Enum):

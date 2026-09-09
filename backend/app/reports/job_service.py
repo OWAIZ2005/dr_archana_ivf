@@ -22,7 +22,7 @@ from app.core.pagination import paginate
 from app.patients.models import Patient
 from app.reports.job_generators import REPORT_GENERATORS, ReportGenerationError
 from app.reports.job_models import ReportJob, ReportStatus, ReportType
-from app.reports.job_schemas import ReportRequest
+from app.reports.job_schemas import PATIENT_SCOPED_REPORTS, ReportRequest
 from app.reports.job_storage import ReportArtifactStorage, build_report_storage
 
 _SUFFIX_BY_TYPE = {"application/json": ".json", "text/csv": ".csv", "application/pdf": ".pdf"}
@@ -55,14 +55,14 @@ async def create_report_job(
     """
     settings = settings or get_settings()
 
-    if request.report_type is ReportType.patient_summary:
+    if request.report_type in PATIENT_SCOPED_REPORTS:
         patient_id = UUID(str(request.parameters["patient_id"]))
         if not await _patient_exists(session, patient_id):
             raise ValidationFailedError(
                 "That patient does not exist. Choose a registered patient."
             )
         parameters = {"patient_id": str(patient_id)}
-    else:  # pragma: no cover - only one report type today
+    else:  # pragma: no cover - every report type today is patient-scoped
         parameters = dict(request.parameters)
 
     simulate = min(
@@ -186,6 +186,23 @@ async def run_report_job(
                 job.status = ReportStatus.succeeded
                 job.finished_at = _utcnow()
                 terminal = ReportStatus.succeeded
+
+                # In-app notification for the requester (spec §10). This is an
+                # internal bell notification only — no SMS/WhatsApp is sent or
+                # implied, since no external patient channel is configured.
+                try:
+                    from app.notifications.models import NotificationTone
+                    from app.notifications.service import push_notification
+
+                    await push_notification(
+                        session,
+                        user_id=job.requested_by_id,
+                        title="Report ready",
+                        body=f"Your {job.report_type.value.replace('_', ' ')} is ready to download.",
+                        tone=NotificationTone.INFO,
+                    )
+                except Exception:  # noqa: BLE001 - never fail a finished job on the notify
+                    pass
             except ReportGenerationError as exc:
                 job.status = ReportStatus.failed
                 job.error = str(exc)[:1000]

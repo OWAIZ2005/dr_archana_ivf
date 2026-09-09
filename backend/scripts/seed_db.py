@@ -320,6 +320,8 @@ async def main() -> None:
         await seed_roles_and_permissions(session)
         staff = await seed_staff(session)
         await seed_master_data(session)
+        from app.messaging.seed import seed_message_templates
+        await seed_message_templates(session)  # idempotent demo message templates
         if with_demo:
             await seed_demo_clinical_data(session, staff)
         await session.commit()

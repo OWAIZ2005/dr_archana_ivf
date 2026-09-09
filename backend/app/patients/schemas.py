@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -129,6 +130,17 @@ class CoupleOut(BaseModel):
     relationship_info: str | None
     infertility_type: str | None
     infertility_duration: str | None
+
+
+class PartnerOut(BaseModel):
+    """Powers GET /patients/{id}/partner — the linked partner of ONE individual
+    patient, for the "View Partner" navigation. Carries only the partner's own
+    identity (name/UHID/summary); no medical data crosses over. ``null`` when the
+    patient has no couple on record."""
+    couple_id: uuid.UUID
+    patient_role: Literal["female", "male"]   # role of the queried patient in the couple
+    partner_role: Literal["female", "male"]   # role of the returned partner
+    partner: PatientSummary
 
 
 class PatientDocumentOut(BaseModel):
