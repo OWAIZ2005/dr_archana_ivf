@@ -23,6 +23,7 @@ DEMO_STAFF = [
     ("receptionist", "DAIVF-STAFF-014", "Lakshmi Narayanan", "lakshmi@drarchanaivf.in", "Patient Services"),
     ("embryologist", "DAIVF-STAFF-007", "Dr. Meera Kapoor", "meera@drarchanaivf.in", "Embryology Laboratory"),
     ("management", "DAIVF-STAFF-002", "Rajesh Venkatesan", "rajesh@drarchanaivf.in", "Operations & Finance"),
+    ("pharmacist", "DAIVF-STAFF-015", "Ganesh Prabhu", "ganesh@drarchanaivf.in", "Pharmacy"),
     ("administrator", "DAIVF-STAFF-000", "System Administrator", "admin@drarchanaivf.in", "IT"),
 ]
 

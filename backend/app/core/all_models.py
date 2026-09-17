@@ -27,6 +27,10 @@ from app.nursing import models as _nursing_models  # noqa: F401
 from app.ot import models as _ot_models  # noqa: F401
 from app.patients import models as _patients_models  # noqa: F401
 from app.pharmacy import models as _pharmacy_models  # noqa: F401
+from app.pharmacy import templates as _pharmacy_templates_models  # noqa: F401
+from app.pharmacy import purchase_returns as _pharmacy_purchase_returns_models  # noqa: F401
+from app.pharmacy import purchase_orders as _pharmacy_purchase_orders_models  # noqa: F401
+from app.pharmacy import settings as _pharmacy_settings_models  # noqa: F401
 from app.prescription import models as _prescription_models  # noqa: F401
 from app.printing import models as _printing_models  # noqa: F401
 from app.purchasing import models as _purchasing_models  # noqa: F401

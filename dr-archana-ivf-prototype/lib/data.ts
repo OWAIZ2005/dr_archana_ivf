@@ -4,7 +4,7 @@
 // re-pointed at live endpoints without refactoring.
 // ============================================================
 
-export type Role = 'doctor' | 'receptionist' | 'embryologist' | 'management';
+export type Role = 'doctor' | 'receptionist' | 'embryologist' | 'management' | 'pharmacist';
 
 export type StatusTone =
   | 'active'
@@ -67,6 +67,16 @@ export const USERS: Record<Role, StaffUser> = {
     email: 'rajesh@drarchanaivf.in',
     department: 'Operations & Finance',
     accent: 'from-amber-500 to-orange-600',
+  },
+  pharmacist: {
+    id: 'DAIVF-STAFF-015',
+    role: 'pharmacist',
+    name: 'Ganesh Prabhu',
+    title: 'Pharmacist-in-Charge',
+    initials: 'GP',
+    email: 'ganesh@drarchanaivf.in',
+    department: 'Pharmacy',
+    accent: 'from-rose-500 to-pink-600',
   },
 };
 
@@ -839,6 +849,11 @@ export const ROLE_MATRIX: Record<Role, { allowed: string[]; restricted: string[]
     summary: 'Operational and financial oversight with configurable clinical visibility.',
     allowed: ['Hospital Dashboard', 'Operational Reports', 'Revenue & Collections', 'Clinical Performance Metrics', 'Inventory Insights', 'Audit Logs'],
     restricted: ['Individual Clinical Notes', 'Embryo-level Laboratory Data'],
+  },
+  pharmacist: {
+    summary: 'Pharmacy operations — medicine catalogue, vendors, purchases, stock and dispensing.',
+    allowed: ['Medicine Catalogue', 'Vendor Management', 'Purchase Entry & GRN', 'Stock & Batch Tracking', 'Stock Adjustment', 'Dispensing & Sales Returns'],
+    restricted: ['Clinical Notes', 'Treatment Plans', 'Financial Reports', 'Staff Administration'],
   },
 };
 

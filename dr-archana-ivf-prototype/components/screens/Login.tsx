@@ -19,6 +19,7 @@ import {
   ArrowRight,
   Fingerprint,
   AlertTriangle,
+  Pill,
 } from 'lucide-react';
 
 const AUTH_STEPS = [
@@ -35,6 +36,7 @@ const ROLE_CARDS: { role: Role; label: string; desc: string; icon: any; email: s
   { role: 'receptionist', label: 'Front Office', desc: 'Registration, scheduling & queue', icon: Fingerprint, email: 'lakshmi@drarchanaivf.in' },
   { role: 'embryologist', label: 'Embryology Lab', desc: 'Oocytes, embryos & cryostorage', icon: Microscope, email: 'meera@drarchanaivf.in' },
   { role: 'management', label: 'Management', desc: 'Operations, revenue & analytics', icon: Sparkles, email: 'rajesh@drarchanaivf.in' },
+  { role: 'pharmacist', label: 'Pharmacy', desc: 'Medicines, vendors, purchases & stock', icon: Pill, email: 'ganesh@drarchanaivf.in' },
 ];
 
 const DEMO_PASSWORD = 'ChangeMe123!';

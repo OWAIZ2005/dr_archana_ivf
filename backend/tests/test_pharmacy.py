@@ -116,3 +116,61 @@ async def test_dispense_never_goes_negative_and_rolls_back_on_partial_failure(
     stock_check = await client.get("/api/v1/pharmacy/medicines", headers=admin_headers)
     gonal_f = next(m for m in stock_check.json() if m["id"] == str(medicine.id))
     assert gonal_f["total_available"] == 55
+
+
+async def test_dispense_applies_discount_and_records_payment_method(
+    client: AsyncClient, admin_headers: dict, db_session: AsyncSession, sample_patient: Patient
+):
+    medicine = await _seed_medicine_with_batches(db_session)  # OLD batch sells at 345000 paise/unit
+
+    resp = await client.post(
+        "/api/v1/pharmacy/dispense", headers={**admin_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "patient_id": str(sample_patient.id),
+            "lines": [{"medicine_id": str(medicine.id), "quantity": 2}],
+            "discount_paise": 50000,
+            "payment_method": "card",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    sale = resp.json()
+    # gross = 2 * 345000 = 690000; net = 690000 - 50000 = 640000
+    assert sale["discount_paise"] == 50000
+    assert sale["total_amount_paise"] == 640000
+    assert sale["payment_method"] == "card"
+
+    fetched = await client.get(f"/api/v1/pharmacy/sales/{sale['id']}", headers=admin_headers)
+    assert fetched.json()["payment_method"] == "card"
+
+
+async def test_dispense_rejects_discount_larger_than_bill(
+    client: AsyncClient, admin_headers: dict, db_session: AsyncSession, sample_patient: Patient
+):
+    medicine = await _seed_medicine_with_batches(db_session)
+
+    resp = await client.post(
+        "/api/v1/pharmacy/dispense", headers={**admin_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "patient_id": str(sample_patient.id),
+            "lines": [{"medicine_id": str(medicine.id), "quantity": 1}],
+            "discount_paise": 999999999,
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error_code"] == "discount_exceeds_total"
+
+
+async def test_dispense_rejects_invalid_payment_method(
+    client: AsyncClient, admin_headers: dict, db_session: AsyncSession, sample_patient: Patient
+):
+    medicine = await _seed_medicine_with_batches(db_session)
+
+    resp = await client.post(
+        "/api/v1/pharmacy/dispense", headers={**admin_headers, "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "patient_id": str(sample_patient.id),
+            "lines": [{"medicine_id": str(medicine.id), "quantity": 1}],
+            "payment_method": "bitcoin",
+        },
+    )
+    assert resp.status_code == 422

@@ -30,6 +30,8 @@ class EventType(StrEnum):
     PATIENT_REGISTERED = "PatientRegistered"
     LEAVE_REQUEST_SUBMITTED = "LeaveRequestSubmitted"
     PURCHASE_ORDER_APPROVED = "PurchaseOrderApproved"
+    PHARMACY_STOCK_RECEIVED = "PharmacyStockReceived"
+    PHARMACY_SALE_RETURNED = "PharmacySaleReturned"
 
 
 async def emit(

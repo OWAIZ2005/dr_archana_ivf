@@ -128,6 +128,11 @@ from app.ot.router import router as ot_router
 from app.patients.documents import router as patient_documents_router
 from app.patients.router import router as patients_router
 from app.pharmacy.router import router as pharmacy_router
+from app.pharmacy.templates import router as pharmacy_templates_router
+from app.pharmacy.purchase_returns import router as pharmacy_purchase_returns_router
+from app.pharmacy.purchase_orders import router as pharmacy_purchase_orders_router
+from app.pharmacy.settings import router as pharmacy_settings_router
+from app.pharmacy.reports import router as pharmacy_reports_router
 from app.prescription.router import router as prescription_router
 from app.printing.router import router as printing_router
 from app.purchasing.router import router as purchasing_router
@@ -140,7 +145,9 @@ for router in (
     auth_router, users_router, roles_router,
     patients_router, patient_documents_router, appointments_router,
     clinical_router, ivf_router, laboratory_router, embryology_router, cryostorage_router, ot_router,
-    pharmacy_router, inventory_router, purchasing_router, billing_router, accounting_router,
+    pharmacy_router, pharmacy_templates_router, pharmacy_purchase_returns_router,
+    pharmacy_purchase_orders_router, pharmacy_settings_router, pharmacy_reports_router,
+    inventory_router, purchasing_router, billing_router, accounting_router,
     assets_router, maintenance_router, quality_router, hr_router,
     notifications_router, printing_router, reports_router, administration_router, audit_router,
     donor_router, prescription_router, clinical_documents_router, messaging_router,

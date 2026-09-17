@@ -1,13 +1,59 @@
-from fastapi import APIRouter, Depends
+import uuid
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
 from app.purchasing import service
-from app.purchasing.schemas import GRNCreate, PurchaseOrderCreate, PurchaseOrderOut
+from app.purchasing.schemas import (
+    GRNCreate,
+    PurchaseOrderCreate,
+    PurchaseOrderOut,
+    VendorCreate,
+    VendorOut,
+    VendorUpdate,
+)
 from app.users.models import User
 
 router = APIRouter(prefix="/purchasing", tags=["purchasing"])
+
+
+@router.get("/vendors", response_model=list[VendorOut])
+async def list_vendors(
+    include_inactive: bool = Query(default=False),
+    session: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("purchasing.read")),
+) -> list[VendorOut]:
+    return await service.list_vendors(session, active_only=not include_inactive)
+
+
+@router.get("/vendors/{vendor_id}", response_model=VendorOut)
+async def get_vendor(
+    vendor_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("purchasing.read")),
+) -> VendorOut:
+    return await service.get_vendor(session, vendor_id)
+
+
+@router.post("/vendors", response_model=VendorOut, status_code=201)
+async def create_vendor(
+    body: VendorCreate,
+    session: AsyncSession = Depends(get_db),
+    current: User = Depends(require_permission("purchasing.vendor_manage")),
+) -> VendorOut:
+    return await service.create_vendor(session, body, actor_id=current.id, actor_role=current.role.code)
+
+
+@router.patch("/vendors/{vendor_id}", response_model=VendorOut)
+async def update_vendor(
+    vendor_id: uuid.UUID,
+    body: VendorUpdate,
+    session: AsyncSession = Depends(get_db),
+    current: User = Depends(require_permission("purchasing.vendor_manage")),
+) -> VendorOut:
+    return await service.update_vendor(session, vendor_id, body, actor_id=current.id, actor_role=current.role.code)
 
 
 @router.get("/orders", response_model=list[PurchaseOrderOut])

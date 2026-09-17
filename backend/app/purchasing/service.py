@@ -5,11 +5,69 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit_event
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, ValidationFailedError
 from app.events.bus import EventType, emit
 from app.inventory.models import InventoryItem, StockMovement, StockMovementType
-from app.purchasing.models import GoodsReceiptNote, PurchaseOrder, PurchaseOrderStatus
-from app.purchasing.schemas import GRNCreate, PurchaseOrderCreate
+from app.purchasing.models import GoodsReceiptNote, PurchaseOrder, PurchaseOrderStatus, Vendor
+from app.purchasing.schemas import GRNCreate, PurchaseOrderCreate, VendorCreate, VendorUpdate
+
+
+# --------------------------------------------------------------------------- #
+# Vendors
+# --------------------------------------------------------------------------- #
+
+async def list_vendors(session: AsyncSession, *, active_only: bool = True) -> list[Vendor]:
+    stmt = select(Vendor).order_by(Vendor.name)
+    if active_only:
+        stmt = stmt.where(Vendor.is_active.is_(True))
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def get_vendor(session: AsyncSession, vendor_id: uuid.UUID) -> Vendor:
+    vendor = await session.get(Vendor, vendor_id)
+    if not vendor:
+        raise NotFoundError("Vendor not found", error_code="vendor_not_found")
+    return vendor
+
+
+async def create_vendor(
+    session: AsyncSession, data: VendorCreate, *, actor_id: uuid.UUID, actor_role: str
+) -> Vendor:
+    exists = (
+        await session.execute(select(Vendor.id).where(Vendor.account_code == data.account_code))
+    ).scalar_one_or_none()
+    if exists is not None:
+        raise ConflictError("A vendor with that account code already exists.", error_code="vendor_exists")
+
+    vendor = Vendor(**data.model_dump())
+    session.add(vendor)
+    await session.flush()
+    await record_audit_event(
+        session, actor_id=actor_id, actor_role=actor_role,
+        action="purchasing.vendor_created", entity_type="Vendor", entity_id=str(vendor.id),
+        after_state={"name": vendor.name, "account_code": vendor.account_code},
+    )
+    return vendor
+
+
+async def update_vendor(
+    session: AsyncSession, vendor_id: uuid.UUID, data: VendorUpdate, *, actor_id: uuid.UUID, actor_role: str
+) -> Vendor:
+    vendor = await get_vendor(session, vendor_id)
+    changes = data.model_dump(exclude_unset=True)
+    if not changes:
+        return vendor
+    before = {k: getattr(vendor, k) for k in changes}
+    for k, v in changes.items():
+        setattr(vendor, k, v)
+    await session.flush()
+    await record_audit_event(
+        session, actor_id=actor_id, actor_role=actor_role,
+        action="purchasing.vendor_updated", entity_type="Vendor", entity_id=str(vendor.id),
+        before_state={k: (v.value if hasattr(v, "value") else v) for k, v in before.items()},
+        after_state={k: (v.value if hasattr(v, "value") else v) for k, v in changes.items()},
+    )
+    return vendor
 
 
 async def list_purchase_orders(session: AsyncSession) -> list[PurchaseOrder]:
