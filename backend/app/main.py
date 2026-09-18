@@ -107,6 +107,8 @@ async def health() -> dict:
 from app.accounting.router import router as accounting_router
 from app.administration.router import router as administration_router
 from app.appointments.router import router as appointments_router
+from app.appointments.reminders import router as reminders_router
+from app.appointments.communications import router as communications_router
 from app.assets.router import router as assets_router
 from app.audit.router import router as audit_router
 from app.auth.router import router as auth_router
@@ -143,7 +145,7 @@ from app.users.router import router as users_router
 
 for router in (
     auth_router, users_router, roles_router,
-    patients_router, patient_documents_router, appointments_router,
+    patients_router, patient_documents_router, appointments_router, reminders_router, communications_router,
     clinical_router, ivf_router, laboratory_router, embryology_router, cryostorage_router, ot_router,
     pharmacy_router, pharmacy_templates_router, pharmacy_purchase_returns_router,
     pharmacy_purchase_orders_router, pharmacy_settings_router, pharmacy_reports_router,

@@ -17,9 +17,16 @@ export interface SaleLineOut {
   batch_id: string;
   quantity: number;
   unit_price_paise: number;
+  discount_percent: number;
 }
 
 export type PaymentMethod = 'cash' | 'card' | 'cheque' | 'online';
+
+export interface SalePaymentOut {
+  id: string;
+  payment_method: PaymentMethod;
+  amount_paise: number;
+}
 
 export interface SaleOut {
   id: string;
@@ -32,6 +39,7 @@ export interface SaleOut {
   status: string;
   created_at: string;
   lines: SaleLineOut[];
+  payments: SalePaymentOut[];
 }
 
 export function useMedicines() {
@@ -53,6 +61,12 @@ export function usePharmacySales() {
 export interface DispenseLineInput {
   medicine_id: string;
   quantity: number;
+  discount_percent?: number;
+}
+
+export interface PaymentSplitInput {
+  payment_method: PaymentMethod;
+  amount_paise: number;
 }
 
 export interface DispenseRequest {
@@ -61,6 +75,7 @@ export interface DispenseRequest {
   lines: DispenseLineInput[];
   discount_paise?: number;
   payment_method?: PaymentMethod;
+  payments?: PaymentSplitInput[] | null;
 }
 
 /** Records a bill — the same FEFO-safe, idempotent, transactional stock
@@ -702,5 +717,61 @@ export function useDuplicateIndentTemplate() {
   return useMutation({
     mutationFn: (templateId: string) => apiFetch<IndentTemplateOut>(`/pharmacy/indent-templates/${templateId}/duplicate`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['indent-templates'] }),
+  });
+}
+
+// ============================================================================
+// Vendor purchase history + medicine catalogue (availability)
+// ============================================================================
+
+export interface VendorMedicineHistoryRow {
+  medicine_id: string;
+  medicine_name: string;
+  batch_number: string;
+  quantity: number;
+  purchase_rate_paise: number;
+  purchase_date: string;
+}
+
+export function useVendorPurchaseHistory(vendorId: string | null) {
+  return useQuery({
+    queryKey: ['vendor-medicine-history', vendorId],
+    queryFn: () => apiFetch<VendorMedicineHistoryRow[]>(`/pharmacy/reports/vendor-medicines?vendor_id=${vendorId}`),
+    enabled: !!vendorId,
+  });
+}
+
+export interface VendorMedicineCatalogEntry {
+  id: string;
+  vendor_id: string;
+  medicine_id: string;
+  medicine_name: string;
+  is_available: boolean;
+  notes: string | null;
+}
+
+export function useVendorCatalog(vendorId: string | null) {
+  return useQuery({
+    queryKey: ['vendor-catalog', vendorId],
+    queryFn: () => apiFetch<VendorMedicineCatalogEntry[]>(`/pharmacy/vendors/${vendorId}/catalog`),
+    enabled: !!vendorId,
+  });
+}
+
+export function useUpsertVendorCatalogEntry(vendorId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { medicine_id: string; is_available: boolean; notes?: string | null }) =>
+      apiFetch<VendorMedicineCatalogEntry>(`/pharmacy/vendors/${vendorId}/catalog`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendor-catalog', vendorId] }),
+  });
+}
+
+export function useDeleteVendorCatalogEntry(vendorId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (medicineId: string) =>
+      apiFetch<void>(`/pharmacy/vendors/${vendorId}/catalog/${medicineId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendor-catalog', vendorId] }),
   });
 }

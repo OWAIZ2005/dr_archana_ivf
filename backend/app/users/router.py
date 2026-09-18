@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import require_permission
+from app.core.deps import require_any_permission, require_permission
 from app.users import service
 from app.users.models import User
 from app.users.schemas import UserCreate, UserSummary, UserUpdate
@@ -28,12 +28,14 @@ async def list_users(
 @router.get("/doctors", response_model=list[UserSummary])
 async def list_doctors(
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(require_permission("appointments.read")),
+    _: User = Depends(require_any_permission("appointments.read", "pharmacy.dispense")),
 ) -> list[UserSummary]:
     """Lightweight staff-picker for the appointment book and other
-    scheduling UIs — deliberately gated behind appointments.read rather
-    than admin.manage_users, since front-desk/clinical roles need this
-    list but should never see the full user-management endpoint."""
+    scheduling UIs — deliberately gated behind appointments.read/
+    pharmacy.dispense rather than admin.manage_users, since front-desk,
+    clinical and pharmacy roles all need this list (pharmacy's New Bill
+    records an optional prescribing doctor) but should never see the full
+    user-management endpoint."""
     users = await service.list_users_by_role_code(session, "doctor")
     return [
         UserSummary(

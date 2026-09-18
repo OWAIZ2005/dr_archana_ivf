@@ -34,6 +34,11 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("appointments.create", "appointments", "Book appointments", False),
     ("appointments.checkin", "appointments", "Check in a patient", False),
     ("appointments.cancel", "appointments", "Cancel an appointment", False),
+    ("appointments.reschedule", "appointments", "Reschedule an appointment", False),
+    ("appointments.manage_batches", "appointments", "Configure appointment batches/time slots", True),
+    # Reminders / communications (front desk)
+    ("reminders.manage", "appointments", "Create/edit/complete front-desk reminders", False),
+    ("communications.create", "appointments", "Log a patient contact attempt (call/email)", False),
     # Clinical
     ("clinical.read", "clinical", "View consultations and clinical notes", False),
     ("clinical.write", "clinical", "Create/edit clinical notes", False),
@@ -136,7 +141,8 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
 ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
     "doctor": ("Doctor", [
         "patients.read", "patients.create", "patients.update", "patients.sensitive_documents",
-        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
+        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel", "appointments.reschedule",
+        "reminders.manage", "communications.create",
         "clinical.read", "clinical.write", "clinical.correct",
         "nursing.read", "nursing.create",
         "ivf.read", "ivf.write", "ivf.monitoring.write",
@@ -159,7 +165,8 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
     ]),
     "receptionist": ("Receptionist", [
         "patients.read", "patients.create", "patients.sensitive_documents",
-        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
+        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel", "appointments.reschedule",
+        "reminders.manage", "communications.create",
         "billing.read", "billing.create", "billing.payment",
         "pharmacy.read",
         "messaging.send",
@@ -195,7 +202,7 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "reports.read", "reports.export", "reports.generate",
     ]),
     "management": ("Management", [
-        "patients.read", "appointments.read",
+        "patients.read", "appointments.read", "appointments.manage_batches",
         "billing.read", "accounting.read",
         "pharmacy.read", "pharmacy.indent_request", "pharmacy.po_approve",
         "inventory.read", "purchasing.read", "purchasing.approve",
@@ -214,7 +221,8 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         # what the general "doctor" role can see — do not add
         # ivf.protocol.* to the doctor role.
         "patients.read", "patients.create", "patients.update", "patients.sensitive_documents",
-        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
+        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel", "appointments.reschedule",
+        "reminders.manage", "communications.create",
         "clinical.read", "clinical.write", "clinical.correct",
         "nursing.read", "nursing.create",
         "ivf.read", "ivf.write", "ivf.monitoring.write", "ivf.protocol.read", "ivf.protocol.write",

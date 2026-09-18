@@ -129,7 +129,14 @@ export interface AppointmentOut {
   channel: AppointmentChannel;
   status: AppointmentStatus;
   checked_in_at: string | null;
+  cancellation_reason: string | null;
+  marked_not_arrived_at: string | null;
+  notes: string | null;
+  token_number: number | null;
+  batch_id: string | null;
 }
+
+export const NOT_ARRIVED_GRACE_PERIOD_MINUTES = 120;
 
 export interface AppointmentCreate {
   patient_id: string;
@@ -137,6 +144,118 @@ export interface AppointmentCreate {
   scheduled_at: string;
   visit_type: string;
   channel: AppointmentChannel;
+  notes?: string | null;
+}
+
+export interface AppointmentBatchOut {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  visit_types: string[];
+  display_order: number;
+  is_active: boolean;
+  capacity: number | null;
+}
+
+export interface AppointmentBatchCreate {
+  name: string;
+  start_time: string;
+  end_time: string;
+  visit_types: string[];
+  display_order?: number;
+  capacity?: number | null;
+}
+
+export interface AppointmentBatchUpdate {
+  name?: string;
+  start_time?: string;
+  end_time?: string;
+  visit_types?: string[];
+  display_order?: number;
+  is_active?: boolean;
+  capacity?: number | null;
+}
+
+export interface BatchGroupOut {
+  batch: AppointmentBatchOut | null;
+  appointments: AppointmentOut[];
+  booked_count: number;
+  remaining: number | null;
+}
+
+export interface AppointmentHistoryOut {
+  id: string;
+  appointment_id: string;
+  old_scheduled_at: string;
+  new_scheduled_at: string;
+  reason: string | null;
+  changed_by_id: string;
+  changed_at: string;
+}
+
+// ---- reminders ------------------------------------------------------------
+
+export type ReminderStatus = 'pending' | 'completed' | 'cancelled';
+
+export interface ReminderOut {
+  id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  reason: string;
+  due_at: string;
+  status: ReminderStatus;
+  notes: string | null;
+  created_by_id: string;
+  completed_by_id: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface ReminderCreate {
+  patient_id: string;
+  appointment_id?: string | null;
+  reason: string;
+  due_at: string;
+  notes?: string | null;
+}
+
+export interface ReminderUpdate {
+  reason?: string;
+  due_at?: string;
+  notes?: string | null;
+}
+
+// ---- communications (contact log) -----------------------------------------
+
+export type CommunicationChannel = 'call' | 'email';
+
+export const COMMUNICATION_OUTCOMES = [
+  'Patient will attend later',
+  'Patient requested rescheduling',
+  'Patient cancelled',
+  'Unable to reach',
+  'Patient confirmed attendance',
+  'Other',
+] as const;
+
+export interface CommunicationOut {
+  id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  channel: CommunicationChannel;
+  outcome: string;
+  notes: string | null;
+  contacted_by_id: string;
+  contacted_at: string;
+}
+
+export interface CommunicationCreate {
+  patient_id: string;
+  appointment_id?: string | null;
+  channel: CommunicationChannel;
+  outcome: string;
+  notes?: string | null;
 }
 
 // ---- reports/dashboard ----------------------------------------------------

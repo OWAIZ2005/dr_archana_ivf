@@ -40,10 +40,19 @@ async def generate_uhid(session: AsyncSession) -> str:
     return f"{prefix}{next_seq:05d}"
 
 
-async def create_patient(session: AsyncSession, data: PatientCreate) -> Patient:
+async def create_patient(
+    session: AsyncSession, data: PatientCreate, *, actor_id: uuid.UUID | None = None, actor_role: str | None = None
+) -> Patient:
     patient = Patient(uhid=await generate_uhid(session), **data.model_dump())
     session.add(patient)
     await session.flush()
+
+    if actor_id is not None:
+        await record_audit_event(
+            session, actor_id=actor_id, actor_role=actor_role,
+            action="patient.created", entity_type="Patient", entity_id=str(patient.id),
+            after_state={"uhid": patient.uhid, "full_name": patient.full_name},
+        )
     return patient
 
 

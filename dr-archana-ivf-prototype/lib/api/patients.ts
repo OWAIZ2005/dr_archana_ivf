@@ -1,12 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './client';
-import type { CoupleCreate, CoupleOut, PatientDocumentOut, PatientListRow, PatientSummary } from './types';
+import type { CoupleCreate, CoupleOut, PatientCreate, PatientDocumentOut, PatientListRow, PatientSummary } from './types';
 
 export function usePatients(search?: string) {
   return useQuery({
     queryKey: ['patients', search ?? ''],
     queryFn: () =>
       apiFetch<PatientListRow[]>(`/patients${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  });
+}
+
+/** Single-patient registration — for a front-desk walk-in/phone booking
+ * that isn't part of an IVF couple record. Distinct from useCreateCouple,
+ * which always creates two linked patients. */
+export function useCreatePatient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PatientCreate) => apiFetch<PatientSummary>('/patients', { method: 'POST', body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['patients'] }),
   });
 }
 

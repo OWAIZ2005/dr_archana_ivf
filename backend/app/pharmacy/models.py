@@ -127,6 +127,7 @@ class PharmacySale(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[SaleStatus] = mapped_column(Enum(SaleStatus), default=SaleStatus.DISPENSED)
 
     lines: Mapped[list["PharmacySaleLine"]] = relationship(back_populates="sale", lazy="selectin")
+    payments: Mapped[list["PharmacySalePayment"]] = relationship(back_populates="sale", lazy="selectin")
 
 
 class PharmacySaleLine(Base, UUIDPrimaryKeyMixin):
@@ -135,10 +136,30 @@ class PharmacySaleLine(Base, UUIDPrimaryKeyMixin):
     sale_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("pharmacy_sales.id"), nullable=False)
     sale: Mapped["PharmacySale"] = relationship(back_populates="lines")
 
+    # Per-medicine discount, applied on top of the batch's selling rate
+    # before the bill-level discount_paise is subtracted — lets a
+    # pharmacist discount one line item (e.g. a promo) without touching
+    # the rest of the bill.
+    discount_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
     medicine_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("medicines.id"), nullable=False)
     batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("medicine_batches.id"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class PharmacySalePayment(Base, UUIDPrimaryKeyMixin):
+    """One or more payment rows per sale — lets a bill be split across
+    methods (e.g. part card, part cash) instead of forcing a single method
+    for the whole amount. A non-split bill still gets exactly one row here,
+    so the frontend always reads the breakdown from the same place."""
+    __tablename__ = "pharmacy_sale_payments"
+
+    sale_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("pharmacy_sales.id"), nullable=False, index=True)
+    sale: Mapped["PharmacySale"] = relationship(back_populates="payments")
+
+    payment_method: Mapped[PaymentMethod] = mapped_column(Enum(PaymentMethod, name="paymentmethod_pharmacy"), nullable=False)
+    amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -358,3 +379,19 @@ class IndentReturnLine(Base, UUIDPrimaryKeyMixin):
     indent_item_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("indent_items.id"), nullable=False)
     batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("medicine_batches.id"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class VendorMedicineCatalog(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """A vendor's declared product catalogue — separate from purchase
+    history. Purchase history (PharmacyPurchaseLine) only tells you what has
+    been bought before; this table lets a pharmacist explicitly mark a
+    medicine as available/unavailable from a given vendor (e.g. the vendor
+    has told them it's out of stock or discontinued), independent of
+    whether anything has ever been purchased from them."""
+    __tablename__ = "vendor_medicine_catalog"
+    __table_args__ = (UniqueConstraint("vendor_id", "medicine_id", name="uq_vendor_medicine_catalog"),)
+
+    vendor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("vendors.id"), nullable=False, index=True)
+    medicine_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("medicines.id"), nullable=False, index=True)
+    is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)

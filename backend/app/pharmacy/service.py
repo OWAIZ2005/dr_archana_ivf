@@ -47,6 +47,7 @@ from app.pharmacy.models import (
     PharmacyPurchaseLine,
     PharmacySale,
     PharmacySaleLine,
+    PharmacySalePayment,
     PharmacySaleReturn,
     PharmacySaleReturnLine,
     PharmacyStockTransaction,
@@ -54,6 +55,7 @@ from app.pharmacy.models import (
     SaleStatus,
     StockAdjustment,
     StockTransactionType,
+    VendorMedicineCatalog,
 )
 from app.pharmacy.schemas import (
     DispenseRequest,
@@ -67,6 +69,7 @@ from app.pharmacy.schemas import (
     PurchaseCreate,
     SaleReturnCreate,
     StockAdjustmentCreate,
+    VendorMedicineCatalogUpsert,
 )
 
 
@@ -143,11 +146,13 @@ async def dispense(
         allocation = await _select_fefo_batches(session, medicine_id=line.medicine_id, quantity_needed=line.quantity)
         for batch, take_qty in allocation:
             batch.quantity_available -= take_qty
-            line_total = batch.selling_rate_paise * take_qty
-            total += line_total
+            gross_line_total = batch.selling_rate_paise * take_qty
+            line_discount = round((gross_line_total * line.discount_percent) / 100)
+            total += gross_line_total - line_discount
             session.add(PharmacySaleLine(
                 sale_id=sale.id, medicine_id=line.medicine_id, batch_id=batch.id,
                 quantity=take_qty, unit_price_paise=batch.selling_rate_paise,
+                discount_percent=line.discount_percent,
             ))
 
         medicine = await session.get(Medicine, line.medicine_id)
@@ -168,13 +173,28 @@ async def dispense(
     if data.discount_paise > total:
         raise ValidationFailedError("Discount cannot exceed the bill's gross amount.", error_code="discount_exceeds_total")
 
-    sale.total_amount_paise = total - data.discount_paise
+    net_payable = total - data.discount_paise
+    sale.total_amount_paise = net_payable
     sale.discount_paise = data.discount_paise
-    sale.payment_method = PaymentMethod(data.payment_method)
+
+    if data.payments:
+        split_sum = sum(p.amount_paise for p in data.payments)
+        if split_sum != net_payable:
+            raise ValidationFailedError(
+                f"Split payment amounts (₹{split_sum / 100:.2f}) must add up to the net payable (₹{net_payable / 100:.2f}).",
+                error_code="split_payment_mismatch",
+            )
+        sale.payment_method = PaymentMethod(data.payments[0].payment_method)
+        for p in data.payments:
+            session.add(PharmacySalePayment(sale_id=sale.id, payment_method=PaymentMethod(p.payment_method), amount_paise=p.amount_paise))
+    else:
+        sale.payment_method = PaymentMethod(data.payment_method)
+        session.add(PharmacySalePayment(sale_id=sale.id, payment_method=PaymentMethod(data.payment_method), amount_paise=net_payable))
+
     await session.flush()
-    # sale.lines were added via raw FK, same pattern as billing's charges —
-    # refresh before SaleOut serializes them outside the async context.
-    await session.refresh(sale, attribute_names=["lines"])
+    # sale.lines/payments were added via raw FK, same pattern as billing's
+    # charges — refresh before SaleOut serializes them outside the async context.
+    await session.refresh(sale, attribute_names=["lines", "payments"])
 
     await record_audit_event(
         session, actor_id=actor_id, actor_role=actor_role,
@@ -858,3 +878,60 @@ async def return_indent(
         after_state={"indent_id": str(indent_id)},
     )
     return return_
+
+
+# --------------------------------------------------------------------------- #
+# Vendor medicine catalogue — availability, independent of purchase history
+# --------------------------------------------------------------------------- #
+
+async def list_vendor_catalog(session: AsyncSession, vendor_id: uuid.UUID) -> list[tuple[VendorMedicineCatalog, str]]:
+    rows = (await session.execute(
+        select(VendorMedicineCatalog, Medicine)
+        .join(Medicine, Medicine.id == VendorMedicineCatalog.medicine_id)
+        .where(VendorMedicineCatalog.vendor_id == vendor_id)
+        .order_by(Medicine.generic_name)
+    )).all()
+    return [(entry, medicine.brand_name or medicine.generic_name) for entry, medicine in rows]
+
+
+async def upsert_vendor_catalog_entry(
+    session: AsyncSession, vendor_id: uuid.UUID, body: VendorMedicineCatalogUpsert,
+) -> tuple[VendorMedicineCatalog, str]:
+    medicine = await session.get(Medicine, body.medicine_id)
+    if not medicine:
+        raise NotFoundError("Medicine not found", error_code="medicine_not_found")
+
+    existing = (await session.execute(
+        select(VendorMedicineCatalog).where(
+            VendorMedicineCatalog.vendor_id == vendor_id,
+            VendorMedicineCatalog.medicine_id == body.medicine_id,
+        )
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.is_available = body.is_available
+        existing.notes = body.notes
+        entry = existing
+    else:
+        entry = VendorMedicineCatalog(
+            vendor_id=vendor_id, medicine_id=body.medicine_id,
+            is_available=body.is_available, notes=body.notes,
+        )
+        session.add(entry)
+
+    await session.flush()
+    await session.refresh(entry)
+    return entry, (medicine.brand_name or medicine.generic_name)
+
+
+async def delete_vendor_catalog_entry(session: AsyncSession, vendor_id: uuid.UUID, medicine_id: uuid.UUID) -> None:
+    entry = (await session.execute(
+        select(VendorMedicineCatalog).where(
+            VendorMedicineCatalog.vendor_id == vendor_id,
+            VendorMedicineCatalog.medicine_id == medicine_id,
+        )
+    )).scalar_one_or_none()
+    if not entry:
+        raise NotFoundError("Catalogue entry not found", error_code="catalog_entry_not_found")
+    await session.delete(entry)
+    await session.flush()

@@ -31,6 +31,8 @@ from app.pharmacy.schemas import (
     StockAdjustmentCreate,
     StockAdjustmentOut,
     StockRowOut,
+    VendorMedicineCatalogOut,
+    VendorMedicineCatalogUpsert,
 )
 from app.users.models import User
 
@@ -326,3 +328,47 @@ async def return_indent(
 ) -> dict:
     r = await service.return_indent(session, indent_id, body, actor_id=current.id, actor_role=current.role.code)
     return {"id": str(r.id), "processed": True}
+
+
+# --------------------------------------------------------------------------- #
+# Vendor medicine catalogue
+# --------------------------------------------------------------------------- #
+
+@router.get("/vendors/{vendor_id}/catalog", response_model=list[VendorMedicineCatalogOut])
+async def list_vendor_catalog(
+    vendor_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    _: User = Depends(require_permission("pharmacy.read")),
+) -> list[VendorMedicineCatalogOut]:
+    rows = await service.list_vendor_catalog(session, vendor_id)
+    return [
+        VendorMedicineCatalogOut(
+            id=entry.id, vendor_id=entry.vendor_id, medicine_id=entry.medicine_id,
+            medicine_name=name, is_available=entry.is_available, notes=entry.notes,
+        )
+        for entry, name in rows
+    ]
+
+
+@router.put("/vendors/{vendor_id}/catalog", response_model=VendorMedicineCatalogOut)
+async def upsert_vendor_catalog(
+    vendor_id: uuid.UUID,
+    body: VendorMedicineCatalogUpsert,
+    session: AsyncSession = Depends(get_db),
+    current: User = Depends(require_permission("pharmacy.manage")),
+) -> VendorMedicineCatalogOut:
+    entry, name = await service.upsert_vendor_catalog_entry(session, vendor_id, body)
+    return VendorMedicineCatalogOut(
+        id=entry.id, vendor_id=entry.vendor_id, medicine_id=entry.medicine_id,
+        medicine_name=name, is_available=entry.is_available, notes=entry.notes,
+    )
+
+
+@router.delete("/vendors/{vendor_id}/catalog/{medicine_id}", status_code=204)
+async def delete_vendor_catalog_entry(
+    vendor_id: uuid.UUID,
+    medicine_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+    current: User = Depends(require_permission("pharmacy.manage")),
+) -> None:
+    await service.delete_vendor_catalog_entry(session, vendor_id, medicine_id)

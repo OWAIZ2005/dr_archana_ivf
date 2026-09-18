@@ -29,6 +29,10 @@ import {
   useReceivePurchase,
   useReturnIndent,
   useUpdateMedicine,
+  useVendorPurchaseHistory,
+  useVendorCatalog,
+  useUpsertVendorCatalogEntry,
+  useDeleteVendorCatalogEntry,
   type IndentOut,
   type IndentStatus,
   type MedicineDetailOut,
@@ -68,7 +72,7 @@ import {
   Truck,
 } from 'lucide-react';
 
-function Metric({ label, value, icon: Icon, tone, currency }: { label: string; value: number; icon: any; tone: string; currency?: boolean }) {
+function Metric({ label, value, icon: Icon, tone, currency, compact = true }: { label: string; value: number; icon: any; tone: string; currency?: boolean; compact?: boolean }) {
   const v = useCountUp(value, 1000);
   return (
     <Card className="p-4">
@@ -76,7 +80,7 @@ function Metric({ label, value, icon: Icon, tone, currency }: { label: string; v
         <Icon className="h-[18px] w-[18px]" />
       </div>
       <p className="tnum tracking-display mt-3 text-[22px] font-semibold leading-none text-ink-900">
-        {currency ? formatINR(Math.round(v), true) : Math.round(v)}
+        {currency ? formatINR(Math.round(v), compact) : Math.round(v)}
       </p>
       <p className="mt-1.5 text-[13px] font-medium text-ink-600">{label}</p>
     </Card>
@@ -183,6 +187,25 @@ export function Pharmacy() {
   }, [q, hasRealMedicines, realMedicines]);
 
   const sales = hasRealMedicines && salesQuery.data ? realSales : PHARMACY_SALES;
+
+  const salesTotals = useMemo(() => {
+    const now = new Date();
+    const todayKey = now.toDateString();
+    let todayPaise = 0, monthPaise = 0, yearPaise = 0, overallPaise = 0;
+    for (const s of salesQuery.data ?? []) {
+      const d = new Date(s.created_at);
+      overallPaise += s.total_amount_paise;
+      if (d.getFullYear() === now.getFullYear()) {
+        yearPaise += s.total_amount_paise;
+        if (d.getMonth() === now.getMonth()) {
+          monthPaise += s.total_amount_paise;
+          if (d.toDateString() === todayKey) todayPaise += s.total_amount_paise;
+        }
+      }
+    }
+    return { todayPaise, monthPaise, yearPaise, overallPaise };
+  }, [salesQuery.data]);
+
   const stockRows = stockQuery.data ?? [];
   const purchases = purchasesQuery.data ?? [];
   const vendors = vendorsQuery.data ?? [];
@@ -232,10 +255,13 @@ export function Pharmacy() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 xl:grid-cols-7">
         {hasRealMedicines ? (
           <>
-            <Metric label="Today's Sales" value={Math.round((salesQuery.data ?? []).reduce((s, sale) => s + sale.total_amount_paise, 0) / 100)} icon={IndianRupee} tone="bg-emerald-50 text-emerald-700 ring-emerald-600/12" currency />
+            <Metric label="Today's Sales" value={Math.round(salesTotals.todayPaise / 100)} icon={IndianRupee} tone="bg-emerald-50 text-emerald-700 ring-emerald-600/12" currency compact={false} />
+            <Metric label="This Month" value={Math.round(salesTotals.monthPaise / 100)} icon={IndianRupee} tone="bg-emerald-50 text-emerald-700 ring-emerald-600/12" currency compact={false} />
+            <Metric label="This Year" value={Math.round(salesTotals.yearPaise / 100)} icon={IndianRupee} tone="bg-emerald-50 text-emerald-700 ring-emerald-600/12" currency />
+            <Metric label="Overall Sales" value={Math.round(salesTotals.overallPaise / 100)} icon={IndianRupee} tone="bg-emerald-50 text-emerald-700 ring-emerald-600/12" currency />
             <Metric label="Below Reorder Level" value={realMedicines.filter((m) => m.stock < m.reorderLevel).length} icon={AlertTriangle} tone="bg-amber-50 text-amber-700 ring-amber-600/12" />
             <Metric label="Total Sales" value={(salesQuery.data ?? []).length} icon={CalendarX2} tone="bg-rose-50 text-rose-700 ring-rose-600/12" />
             <Metric label="Total SKUs" value={realMedicines.length} icon={Package} tone="bg-sky-50 text-sky-700 ring-sky-600/12" />
@@ -672,6 +698,13 @@ function AddPurchaseModal({ open, onClose, vendors, medicines }: { open: boolean
   const [lines, setLines] = useState<PurchaseLineCreate[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const vendorCatalogQuery = useVendorCatalog(vendorId || null);
+  const unavailableMedicineIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of vendorCatalogQuery.data ?? []) if (!e.is_available) s.add(e.medicine_id);
+    return s;
+  }, [vendorCatalogQuery.data]);
+
   const addLine = () => setLines((l) => [...l, { medicine_id: '', batch_number: '', quantity: 1, free_quantity: 0, purchase_rate_paise: 0, selling_price_paise: 0, discount_percent: 0, expiry_date: '', hsn_code: '', tax_percent: 12 }]);
   const updateLine = (i: number, patch: Partial<PurchaseLineCreate>) => setLines((l) => l.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
   const removeLine = (i: number) => setLines((l) => l.filter((_, idx) => idx !== i));
@@ -730,10 +763,17 @@ function AddPurchaseModal({ open, onClose, vendors, medicines }: { open: boolean
           {lines.map((line, i) => (
             <Card key={i} className="p-3">
               <div className="grid gap-2.5 sm:grid-cols-4">
-                <Select label="Medicine" value={line.medicine_id} onChange={(e) => updateLine(i, { medicine_id: e.target.value })}>
-                  <option value="">Select…</option>
-                  {medicines.map((m) => <option key={m.id} value={m.id}>{m.brand_name ?? m.generic_name}</option>)}
-                </Select>
+                <div>
+                  <Select label="Medicine" value={line.medicine_id} onChange={(e) => updateLine(i, { medicine_id: e.target.value })}>
+                    <option value="">Select…</option>
+                    {medicines.map((m) => <option key={m.id} value={m.id}>{m.brand_name ?? m.generic_name}</option>)}
+                  </Select>
+                  {line.medicine_id && unavailableMedicineIds.has(line.medicine_id) && (
+                    <p className="mt-1 flex items-center gap-1 text-[12px] font-medium text-amber-600">
+                      <AlertTriangle className="h-3 w-3" /> Not available from this vendor
+                    </p>
+                  )}
+                </div>
                 <Input label="Batch no." value={line.batch_number} onChange={(e) => updateLine(i, { batch_number: e.target.value })} />
                 <Input label="Expiry" type="date" value={line.expiry_date} onChange={(e) => updateLine(i, { expiry_date: e.target.value })} />
                 <Input label="Qty" type="number" value={String(line.quantity)} onChange={(e) => updateLine(i, { quantity: Number(e.target.value) || 0 })} />
@@ -936,6 +976,13 @@ interface BillLine {
   key: number;
   medicine_id: string;
   quantity: number;
+  discount_percent: number;
+}
+
+interface PaymentSplitRow {
+  key: number;
+  method: PaymentMethod;
+  amount: string;
 }
 
 function NewBillModal({
@@ -951,21 +998,30 @@ function NewBillModal({
   const dispense = useDispenseSale();
   const [patientId, setPatientId] = useState('');
   const [doctorId, setDoctorId] = useState('');
-  const [lines, setLines] = useState<BillLine[]>([{ key: 0, medicine_id: '', quantity: 1 }]);
+  const [lines, setLines] = useState<BillLine[]>([{ key: 0, medicine_id: '', quantity: 1, discount_percent: 0 }]);
   const nextKey = useRef(1);
-  const [discountRupees, setDiscountRupees] = useState('0');
+  const [discountPercent, setDiscountPercent] = useState('0');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [splitPayment, setSplitPayment] = useState(false);
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplitRow[]>([{ key: 0, method: 'cash', amount: '' }, { key: 1, method: 'card', amount: '' }]);
+  const nextSplitKey = useRef(2);
   const [error, setError] = useState<string | null>(null);
   const [savedBill, setSavedBill] = useState<{ bill_number: string; amount: number; method: PaymentMethod } | null>(null);
 
 
   const reset = () => {
-    setPatientId(''); setDoctorId(''); setLines([{ key: 0, medicine_id: '', quantity: 1 }]);
-    setDiscountRupees('0'); setPaymentMethod('cash'); setError(null); setSavedBill(null); dispense.reset();
+    setPatientId(''); setDoctorId(''); setLines([{ key: 0, medicine_id: '', quantity: 1, discount_percent: 0 }]);
+    setDiscountPercent('0'); setPaymentMethod('cash'); setSplitPayment(false);
+    setPaymentSplits([{ key: 0, method: 'cash', amount: '' }, { key: 1, method: 'card', amount: '' }]);
+    setError(null); setSavedBill(null); dispense.reset();
   };
   const close = () => { reset(); onClose(); };
 
-  const addLine = () => { setLines((l) => [...l, { key: nextKey.current++, medicine_id: '', quantity: 1 }]); };
+  const addLine = () => { setLines((l) => [...l, { key: nextKey.current++, medicine_id: '', quantity: 1, discount_percent: 0 }]); };
+  const addSplitRow = () => setPaymentSplits((s) => [...s, { key: nextSplitKey.current++, method: 'cash', amount: '' }]);
+  const updateSplitRow = (key: number, patch: Partial<PaymentSplitRow>) =>
+    setPaymentSplits((s) => s.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  const removeSplitRow = (key: number) => setPaymentSplits((s) => (s.length > 1 ? s.filter((row) => row.key !== key) : s));
   const updateLine = (key: number, patch: Partial<BillLine>) =>
     setLines((l) => l.map((row) => (row.key === key ? { ...row, ...patch } : row)));
   const removeLine = (key: number) => setLines((l) => (l.length > 1 ? l.filter((row) => row.key !== key) : l));
@@ -984,8 +1040,12 @@ function NewBillModal({
     setLineTotals((prev) => (prev[key] === total ? prev : { ...prev, [key]: total }));
 
   const grossPaise = lines.reduce((sum, l) => sum + (lineTotals[l.key] ?? 0), 0);
-  const discountPaise = Math.min(Math.round((Number(discountRupees) || 0) * 100), grossPaise);
+  const clampedDiscountPercent = Math.min(Math.max(Number(discountPercent) || 0, 0), 100);
+  const discountPaise = Math.min(Math.round((grossPaise * clampedDiscountPercent) / 100), grossPaise);
   const balancePaise = Math.max(grossPaise - discountPaise, 0);
+
+  const splitTotalPaise = paymentSplits.reduce((sum, r) => sum + Math.round((Number(r.amount) || 0) * 100), 0);
+  const splitMismatch = splitPayment && splitTotalPaise !== balancePaise;
 
   const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; icon: any }[] = [
     { id: 'cash', label: 'Cash', icon: Banknote },
@@ -1012,16 +1072,24 @@ function NewBillModal({
               <p className="tnum text-[13px] text-ink-600">Balance: <span className="font-semibold text-ink-900">{formatINR(Math.round(balancePaise / 100))}</span></p>
               <Button variant="ghost" onClick={close}>Cancel</Button>
               <Button
-                variant="primary" disabled={!patientId || lines.every((l) => !l.medicine_id) || dispense.isPending} loading={dispense.isPending}
+                variant="primary" disabled={!patientId || lines.every((l) => !l.medicine_id) || dispense.isPending || splitMismatch} loading={dispense.isPending}
                 onClick={() => {
                   setError(null);
                   const validLines = lines.filter((l) => l.medicine_id && l.quantity > 0);
                   if (validLines.length === 0) { setError('Add at least one medicine.'); return; }
+                  if (splitPayment && splitMismatch) {
+                    setError(`Split payments (${formatINR(Math.round(splitTotalPaise / 100))}) must add up to the balance (${formatINR(Math.round(balancePaise / 100))}).`);
+                    return;
+                  }
                   dispense.mutate(
                     {
                       patient_id: patientId, prescribed_by_id: doctorId || null,
-                      lines: validLines.map((l) => ({ medicine_id: l.medicine_id, quantity: l.quantity })),
-                      discount_paise: discountPaise, payment_method: paymentMethod,
+                      lines: validLines.map((l) => ({ medicine_id: l.medicine_id, quantity: l.quantity, discount_percent: l.discount_percent })),
+                      discount_paise: discountPaise,
+                      payment_method: paymentMethod,
+                      payments: splitPayment
+                        ? paymentSplits.filter((r) => (Number(r.amount) || 0) > 0).map((r) => ({ payment_method: r.method, amount_paise: Math.round((Number(r.amount) || 0) * 100) }))
+                        : null,
                     },
                     {
                       onSuccess: (sale) => {
@@ -1072,11 +1140,14 @@ function NewBillModal({
           <Card className="space-y-3 p-4">
             <div className="flex items-center justify-between text-[14px]"><span className="text-ink-500">Net Amount</span><span className="tnum font-semibold text-ink-900">{formatINR(Math.round(grossPaise / 100))}</span></div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[14px] text-ink-500">Discount (₹)</span>
-              <input
-                type="number" min={0} value={discountRupees} onChange={(e) => setDiscountRupees(e.target.value)}
-                className="h-9 w-28 rounded-lg border border-ink-200 px-2 text-right text-[14px] text-ink-900"
-              />
+              <span className="text-[14px] text-ink-500">Discount (%)</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0} max={100} value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)}
+                  className="h-9 w-20 rounded-lg border border-ink-200 px-2 text-right text-[14px] text-ink-900"
+                />
+                <span className="tnum text-[13px] text-ink-400">= {formatINR(Math.round(discountPaise / 100))}</span>
+              </div>
             </div>
             <div className="flex items-center justify-between border-t border-ink-100 pt-3 text-[15px] font-semibold">
               <span className="text-ink-700">Balance</span><span className="tnum text-ink-900">{formatINR(Math.round(balancePaise / 100))}</span>
@@ -1084,25 +1155,64 @@ function NewBillModal({
           </Card>
 
           <div>
-            <p className="mb-1.5 text-[13.5px] font-medium text-ink-700">Payment method</p>
-            <div className="grid grid-cols-4 gap-2">
-              {PAYMENT_OPTIONS.map((opt) => {
-                const Icon = opt.icon;
-                const active = paymentMethod === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => setPaymentMethod(opt.id)}
-                    className={cn(
-                      'flex flex-col items-center gap-1 rounded-xl border p-3 text-[12.5px] font-medium transition-colors',
-                      active ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" /> {opt.label}
-                  </button>
-                );
-              })}
+            <div className="mb-1.5 flex items-center justify-between">
+              <p className="text-[13.5px] font-medium text-ink-700">Payment method</p>
+              <label className="flex items-center gap-1.5 text-[12.5px] font-medium text-ink-500">
+                <input type="checkbox" checked={splitPayment} onChange={(e) => setSplitPayment(e.target.checked)} className="h-3.5 w-3.5" />
+                Split across methods
+              </label>
             </div>
+
+            {!splitPayment ? (
+              <div className="grid grid-cols-4 gap-2">
+                {PAYMENT_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const active = paymentMethod === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => setPaymentMethod(opt.id)}
+                      className={cn(
+                        'flex flex-col items-center gap-1 rounded-xl border p-3 text-[12.5px] font-medium transition-colors',
+                        active ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+                      )}
+                    >
+                      <Icon className="h-4 w-4" /> {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {paymentSplits.map((row) => (
+                  <div key={row.key} className="flex items-center gap-2">
+                    <select
+                      value={row.method}
+                      onChange={(e) => updateSplitRow(row.key, { method: e.target.value as PaymentMethod })}
+                      className="h-9 flex-1 rounded-lg border border-ink-200 px-2 text-[13.5px] text-ink-900"
+                    >
+                      {PAYMENT_OPTIONS.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                    </select>
+                    <input
+                      type="number" min={0} placeholder="Amount (₹)" value={row.amount}
+                      onChange={(e) => updateSplitRow(row.key, { amount: e.target.value })}
+                      className="h-9 w-32 rounded-lg border border-ink-200 px-2 text-right text-[13.5px] text-ink-900"
+                    />
+                    {paymentSplits.length > 1 && (
+                      <button onClick={() => removeSplitRow(row.key)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose-600">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-1">
+                  <button onClick={addSplitRow} className="text-[12.5px] font-medium text-brand-700 hover:text-brand-800">+ Add payment method</button>
+                  <p className={cn('tnum text-[12.5px] font-medium', splitMismatch ? 'text-rose-600' : 'text-emerald-600')}>
+                    {formatINR(Math.round(splitTotalPaise / 100))} of {formatINR(Math.round(balancePaise / 100))}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1127,7 +1237,9 @@ function BillLineRowWithTotal({
     return [...batches].sort((a, b) => a.expiry_date.localeCompare(b.expiry_date))[0] ?? null;
   }, [medicineDetail.data]);
   const rate = fefoBatch?.selling_rate_paise ?? 0;
-  const total = rate * (line.quantity || 0);
+  const grossLineTotal = rate * (line.quantity || 0);
+  const lineDiscount = Math.round((grossLineTotal * (line.discount_percent || 0)) / 100);
+  const total = grossLineTotal - lineDiscount;
 
   React.useEffect(() => {
     onTotal(total);
@@ -1136,7 +1248,7 @@ function BillLineRowWithTotal({
 
   return (
     <Card className="p-3">
-      <div className="grid gap-2.5 sm:grid-cols-5">
+      <div className="grid gap-2.5 sm:grid-cols-6">
         <div className="sm:col-span-2">
           <Select label="Medicine" value={line.medicine_id} onChange={(e) => onChange({ medicine_id: e.target.value })}>
             <option value="">Select…</option>
@@ -1145,6 +1257,7 @@ function BillLineRowWithTotal({
         </div>
         <Input label="Qty" type="number" min={1} value={String(line.quantity)} onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })} />
         <Field label="Rate (FEFO batch)" value={rate ? `₹${(rate / 100).toFixed(2)}` : '—'} />
+        <Input label="Discount %" type="number" min={0} max={100} value={String(line.discount_percent)} onChange={(e) => onChange({ discount_percent: Math.min(Math.max(Number(e.target.value) || 0, 0), 100) })} />
         <Field label="Line total" value={formatINR(Math.round(total / 100))} />
       </div>
       {line.medicine_id && !medicineDetail.isLoading && !fefoBatch && (
@@ -1371,6 +1484,7 @@ function VendorDetailModal({ vendorId, canManage, onClose }: { vendorId: string;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<VendorOut> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<'info' | 'history' | 'catalog'>('info');
 
   const vendor = (vendorsQuery.data ?? []).find((v) => v.id === vendorId) ?? null;
 
@@ -1450,18 +1564,159 @@ function VendorDetailModal({ vendorId, canManage, onClose }: { vendorId: string;
           <Switch label="Active" checked={form.is_active !== false} onChange={(v) => set({ is_active: v })} />
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="City" value={vendor.city ?? '—'} />
-          <Field label="GST number" value={vendor.gst_number ?? '—'} />
-          <Field label="Payment type" value={vendor.payment_type} />
-          <Field label="Credit period" value={`${vendor.credit_period_days} days`} />
-          <Field label="Bank" value={vendor.bank_name ?? '—'} />
-          <Field label="Account number" value={vendor.bank_account_number ?? '—'} />
-          <Field label="IFSC" value={vendor.ifsc_code ?? '—'} />
-          <Field label="Contact phone" value={vendor.contact_phone ?? '—'} />
+        <div className="space-y-4">
+          <div className="flex gap-1.5 border-b border-ink-100 pb-3">
+            {([
+              ['info', 'Details'],
+              ['history', 'Purchase History'],
+              ['catalog', 'Product Catalog'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={cn(
+                  'rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors',
+                  view === id ? 'bg-brand-600 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {view === 'info' && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="City" value={vendor.city ?? '—'} />
+              <Field label="GST number" value={vendor.gst_number ?? '—'} />
+              <Field label="Payment type" value={vendor.payment_type} />
+              <Field label="Credit period" value={`${vendor.credit_period_days} days`} />
+              <Field label="Bank" value={vendor.bank_name ?? '—'} />
+              <Field label="Account number" value={vendor.bank_account_number ?? '—'} />
+              <Field label="IFSC" value={vendor.ifsc_code ?? '—'} />
+              <Field label="Contact phone" value={vendor.contact_phone ?? '—'} />
+            </div>
+          )}
+          {view === 'history' && <VendorPurchaseHistorySection vendorId={vendorId} />}
+          {view === 'catalog' && <VendorCatalogSection vendorId={vendorId} canManage={canManage} />}
         </div>
       )}
     </Modal>
+  );
+}
+
+function VendorPurchaseHistorySection({ vendorId }: { vendorId: string }) {
+  const historyQuery = useVendorPurchaseHistory(vendorId);
+  const rows = historyQuery.data ?? [];
+
+  if (historyQuery.isLoading) return <p className="py-6 text-center text-[13px] text-ink-500">Loading…</p>;
+  if (rows.length === 0) return <InfoNote>No purchases have been recorded from this vendor yet.</InfoNote>;
+
+  return (
+    <div className="max-h-[360px] overflow-y-auto rounded-xl border border-ink-100">
+      <table className="w-full text-[13px]">
+        <thead className="sticky top-0 bg-ink-50 text-[11px] uppercase tracking-wide text-ink-400">
+          <tr>
+            <th className="px-3 py-2 text-left">Medicine</th>
+            <th className="px-3 py-2 text-left">Batch</th>
+            <th className="px-3 py-2 text-right">Qty</th>
+            <th className="px-3 py-2 text-right">Rate</th>
+            <th className="px-3 py-2 text-right">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.medicine_id}-${r.batch_number}-${i}`} className="border-t border-ink-50">
+              <td className="px-3 py-2 font-medium text-ink-800">{r.medicine_name}</td>
+              <td className="px-3 py-2 text-ink-500">{r.batch_number}</td>
+              <td className="px-3 py-2 text-right tnum">{r.quantity}</td>
+              <td className="px-3 py-2 text-right tnum">{formatINR(r.purchase_rate_paise / 100, true)}</td>
+              <td className="px-3 py-2 text-right tnum text-ink-500">{r.purchase_date}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function VendorCatalogSection({ vendorId, canManage }: { vendorId: string; canManage: boolean }) {
+  const { toast } = useApp();
+  const catalogQuery = useVendorCatalog(vendorId);
+  const medicinesQuery = useMedicines();
+  const upsert = useUpsertVendorCatalogEntry(vendorId);
+  const remove = useDeleteVendorCatalogEntry(vendorId);
+  const [medicineId, setMedicineId] = useState('');
+  const [available, setAvailable] = useState(true);
+
+  const entries = catalogQuery.data ?? [];
+  const cataloguedIds = new Set(entries.map((e) => e.medicine_id));
+  const selectableMedicines = (medicinesQuery.data ?? []).filter((m) => !cataloguedIds.has(m.id));
+
+  const add = () => {
+    if (!medicineId) return;
+    upsert.mutate(
+      { medicine_id: medicineId, is_available: available },
+      {
+        onSuccess: () => { setMedicineId(''); setAvailable(true); toast({ title: 'Catalogue updated', tone: 'success' }); },
+        onError: (e) => toast({ title: 'Could not save', body: e instanceof ApiError ? e.message : undefined, tone: 'error' }),
+      }
+    );
+  };
+
+  return (
+    <div className="space-y-3">
+      {canManage && (
+        <div className="flex flex-wrap items-end gap-2 rounded-xl bg-ink-50 p-3">
+          <div className="min-w-[220px] flex-1">
+            <Select label="Medicine" value={medicineId} onChange={(e) => setMedicineId(e.target.value)}>
+              <option value="">Select a medicine…</option>
+              {selectableMedicines.map((m) => (
+                <option key={m.id} value={m.id}>{m.brand_name ?? m.generic_name}</option>
+              ))}
+            </Select>
+          </div>
+          <Select label="Availability" value={available ? 'yes' : 'no'} onChange={(e) => setAvailable(e.target.value === 'yes')}>
+            <option value="yes">Available</option>
+            <option value="no">Not available</option>
+          </Select>
+          <Button variant="primary" icon={<Plus className="h-3.5 w-3.5" />} disabled={!medicineId} loading={upsert.isPending} onClick={add}>
+            Add
+          </Button>
+        </div>
+      )}
+
+      {entries.length === 0 ? (
+        <InfoNote>No products catalogued for this vendor yet. Add one above to start marking availability.</InfoNote>
+      ) : (
+        <div className="max-h-[320px] space-y-1.5 overflow-y-auto">
+          {entries.map((e) => (
+            <div key={e.id} className="flex items-center justify-between rounded-lg border border-ink-100 px-3 py-2">
+              <p className="text-[13.5px] font-medium text-ink-900">{e.medicine_name}</p>
+              <div className="flex items-center gap-2">
+                <Badge tone={e.is_available ? 'completed' : 'attention'} size="sm">{e.is_available ? 'Available' : 'Not Available'}</Badge>
+                {canManage && (
+                  <>
+                    <Button
+                      variant="ghost" size="sm"
+                      onClick={() => upsert.mutate({ medicine_id: e.medicine_id, is_available: !e.is_available, notes: e.notes })}
+                    >
+                      Mark {e.is_available ? 'unavailable' : 'available'}
+                    </Button>
+                    <button
+                      aria-label="Remove"
+                      onClick={() => remove.mutate(e.medicine_id)}
+                      className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

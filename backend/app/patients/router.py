@@ -9,6 +9,7 @@ from app.patients.schemas import (
     CoupleOut,
     MandatoryDocumentStatus,
     PartnerOut,
+    PatientCreate,
     PatientListRow,
     PatientSummary,
     PatientUpdate,
@@ -28,6 +29,19 @@ async def list_patients(
     _: User = Depends(require_permission("patients.read")),
 ) -> list[PatientListRow]:
     return await service.list_patients(session, search=search)
+
+
+@router.post("", response_model=PatientSummary, status_code=201)
+async def create_patient(
+    body: PatientCreate,
+    session: AsyncSession = Depends(get_db),
+    current: User = Depends(require_permission("patients.create")),
+) -> PatientSummary:
+    """Single-patient registration — for front-desk walk-ins/phone
+    bookings that aren't part of an IVF couple record. Reuses the same
+    `create_patient`/UHID-generation service `create_couple` already
+    calls twice; this just exposes it directly for the one-patient case."""
+    return await service.create_patient(session, body, actor_id=current.id, actor_role=current.role.code)
 
 
 @router.get("/{patient_id}/summary", response_model=PatientSummary)

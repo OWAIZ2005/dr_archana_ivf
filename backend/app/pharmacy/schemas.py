@@ -114,9 +114,25 @@ class BatchOut(BaseModel):
     selling_rate_paise: int
 
 
+_PAYMENT_METHODS = {"cash", "card", "cheque", "online"}
+
+
 class DispenseLine(BaseModel):
     medicine_id: uuid.UUID
     quantity: int = Field(gt=0)
+    discount_percent: int = Field(default=0, ge=0, le=100)
+
+
+class PaymentSplitIn(BaseModel):
+    payment_method: str
+    amount_paise: int = Field(gt=0)
+
+    @field_validator("payment_method")
+    @classmethod
+    def _valid_payment_method(cls, v: str) -> str:
+        if v not in _PAYMENT_METHODS:
+            raise ValueError(f"payment_method must be one of {sorted(_PAYMENT_METHODS)}")
+        return v
 
 
 class DispenseRequest(BaseModel):
@@ -126,13 +142,16 @@ class DispenseRequest(BaseModel):
     create_invoice: bool = True
     discount_paise: int = Field(default=0, ge=0)
     payment_method: str = "cash"
+    # When set, the bill is split across these methods instead of the
+    # single payment_method above — their amounts must sum to exactly the
+    # net payable (gross minus discount_paise).
+    payments: list[PaymentSplitIn] | None = None
 
     @field_validator("payment_method")
     @classmethod
     def _valid_payment_method(cls, v: str) -> str:
-        allowed = {"cash", "card", "cheque", "online"}
-        if v not in allowed:
-            raise ValueError(f"payment_method must be one of {sorted(allowed)}")
+        if v not in _PAYMENT_METHODS:
+            raise ValueError(f"payment_method must be one of {sorted(_PAYMENT_METHODS)}")
         return v
 
 
@@ -143,6 +162,14 @@ class SaleLineOut(BaseModel):
     batch_id: uuid.UUID
     quantity: int
     unit_price_paise: int
+    discount_percent: int
+
+
+class SalePaymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    payment_method: str
+    amount_paise: int
 
 
 class SaleOut(BaseModel):
@@ -157,6 +184,7 @@ class SaleOut(BaseModel):
     status: str
     created_at: datetime
     lines: list[SaleLineOut]
+    payments: list[SalePaymentOut]
 
 
 class MedicineDetailOut(BaseModel):
@@ -388,3 +416,34 @@ class AvailableStockOut(BaseModel):
     delivering" step of the indent workflow."""
     medicine_id: uuid.UUID
     available: int
+
+
+# --------------------------------------------------------------------------- #
+# Vendor medicine catalogue (availability, independent of purchase history)
+# --------------------------------------------------------------------------- #
+
+class VendorMedicineCatalogUpsert(BaseModel):
+    medicine_id: uuid.UUID
+    is_available: bool = True
+    notes: str | None = None
+
+
+class VendorMedicineCatalogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    vendor_id: uuid.UUID
+    medicine_id: uuid.UUID
+    medicine_name: str
+    is_available: bool
+    notes: str | None
+
+
+class VendorMedicineHistoryOut(BaseModel):
+    """One line item ever bought from this vendor — real purchase history,
+    distinct from the catalogue's editable availability flag above."""
+    medicine_id: uuid.UUID
+    medicine_name: str
+    batch_number: str
+    quantity: int
+    purchase_rate_paise: int
+    purchase_date: date
