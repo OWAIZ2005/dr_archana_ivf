@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { Badge, Button, Card, Field, InfoNote, Input, Modal, Select } from '@/components/ui/primitives';
+import { Badge, Button, Card, Field, InfoNote, Input, Modal, RemoveLineButton, Select } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api/client';
 import {
   useAddTemplateItem, useCreateTemplate, useRemoveTemplateItem, useTemplate, useTemplates, useUpdateTemplate, useUpdateTemplateItem,
@@ -115,7 +115,7 @@ function TemplateFormModal({ open, onClose, medicines }: { open: boolean; onClos
                 </Select>
                 <Input label="Default qty" type="number" min={1} value={String(line.default_quantity)} onChange={(e) => updateLine(line.key, { default_quantity: Number(e.target.value) || 0 })} />
               </div>
-              <button onClick={() => removeLine(line.key)} className="mt-2 text-[12px] font-medium text-rose-600 hover:text-rose-700">Remove line</button>
+              <RemoveLineButton label="Remove line" onClick={() => removeLine(line.key)} />
             </Card>
           ))}
           <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={addLine}>Add medicine</Button>
@@ -137,6 +137,11 @@ function TemplateDetailModal({
   const [newMedicineId, setNewMedicineId] = useState('');
   const [newQty, setNewQty] = useState('1');
   const [editingQty, setEditingQty] = useState<Record<string, string>>({});
+  // Removing a template item is permanent and one click away, right next to
+  // a quantity field people click near constantly — require a second click
+  // to confirm instead of a native confirm() (which can throw in some
+  // embedded browser contexts, same failure mode as window.prompt()).
+  const [confirmingItemId, setConfirmingItemId] = useState<string | null>(null);
 
   const template = templateQuery.data;
   const availableMedicines = useMemo(() => {
@@ -186,9 +191,22 @@ function TemplateDetailModal({
                         if (qty > 0 && qty !== item.default_quantity) updateItem.mutate({ templateId, itemId: item.id, quantity: qty });
                       }}
                     />
-                    <button onClick={() => removeItem.mutate({ templateId, itemId: item.id })} className="text-rose-600 hover:text-rose-700">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {confirmingItemId === item.id ? (
+                      <Button
+                        size="sm" variant="danger" loading={removeItem.isPending}
+                        onClick={() => removeItem.mutate({ templateId, itemId: item.id }, { onSettled: () => setConfirmingItemId(null) })}
+                      >
+                        Confirm remove?
+                      </Button>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmingItemId(item.id)}
+                        aria-label={`Remove ${medicineNameById[item.medicine_id] ?? 'medicine'} from this template`}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </>
                 ) : (
                   <span className="tnum text-[13px] text-ink-600">{item.default_quantity}</span>

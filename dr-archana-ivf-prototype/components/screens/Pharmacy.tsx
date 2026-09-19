@@ -4,7 +4,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { PHARMACY_ITEMS, PHARMACY_SALES, PHARMACY_METRICS } from '@/lib/data';
 import { cn, formatINR } from '@/lib/utils';
-import { Badge, Button, Card, CardHeader, Field, InfoNote, Input, Modal, ProgressBar, SectionTitle, Select, Switch, Tabs } from '@/components/ui/primitives';
+import { Badge, Button, Card, CardHeader, Field, InfoNote, Input, Modal, ProgressBar, RemoveLineButton, SectionTitle, Select, Switch, Tabs } from '@/components/ui/primitives';
 import { useCountUp } from '@/lib/hooks';
 import { ApiError } from '@/lib/api/client';
 import {
@@ -784,7 +784,7 @@ function AddPurchaseModal({ open, onClose, vendors, medicines }: { open: boolean
                 <Input label="Tax %" type="number" value={String(line.tax_percent)} onChange={(e) => updateLine(i, { tax_percent: Number(e.target.value) || 0 })} />
                 <Input label="HSN" value={line.hsn_code ?? ''} onChange={(e) => updateLine(i, { hsn_code: e.target.value })} />
               </div>
-              <button onClick={() => removeLine(i)} className="mt-2 text-[12px] font-medium text-rose-600 hover:text-rose-700">Remove line</button>
+              <RemoveLineButton label="Remove line" onClick={() => removeLine(i)} />
             </Card>
           ))}
           <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={addLine}>Add medicine line</Button>
@@ -816,7 +816,9 @@ function StockAdjustModal({ row, onClose }: { row: { batch_id: string; medicine_
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button
               variant="primary" loading={adjust.isPending}
+              disabled={difference !== 0 && !reason.trim()}
               onClick={() => {
+                if (difference !== 0 && !reason.trim()) { setError('A reason is required when the physical count differs from system stock.'); return; }
                 setError(null);
                 adjust.mutate(
                   { batch_id: row.batch_id, physical_stock: Number(physical) || 0, reason: reason.trim() || null },
@@ -837,7 +839,9 @@ function StockAdjustModal({ row, onClose }: { row: { batch_id: string; medicine_
           Difference: {difference > 0 ? '+' : ''}{difference}
         </p>
         <label className="block">
-          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason</span>
+          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">
+            Reason{difference !== 0 ? '' : ' (optional)'}
+          </span>
           <textarea className="min-h-[70px] w-full rounded-lg border border-ink-200 bg-white p-3 text-[14px] text-ink-900" placeholder="Physical count / damage / expiry write-off…" value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
       </div>
@@ -1199,7 +1203,11 @@ function NewBillModal({
                       className="h-9 w-32 rounded-lg border border-ink-200 px-2 text-right text-[13.5px] text-ink-900"
                     />
                     {paymentSplits.length > 1 && (
-                      <button onClick={() => removeSplitRow(row.key)} className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose-600">
+                      <button
+                        onClick={() => removeSplitRow(row.key)}
+                        aria-label="Remove payment method"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-400 hover:bg-rose-50 hover:text-rose-600"
+                      >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -1263,9 +1271,7 @@ function BillLineRowWithTotal({
       {line.medicine_id && !medicineDetail.isLoading && !fefoBatch && (
         <p className="mt-2 text-[12px] text-rose-600">No stock available for this medicine.</p>
       )}
-      <button onClick={onRemove} className="mt-2 flex items-center gap-1 text-[12px] font-medium text-rose-600 hover:text-rose-700">
-        <Trash2 className="h-3 w-3" /> Remove
-      </button>
+      <RemoveLineButton onClick={onRemove} />
     </Card>
   );
 }
@@ -1703,9 +1709,9 @@ function VendorCatalogSection({ vendorId, canManage }: { vendorId: string; canMa
                       Mark {e.is_available ? 'unavailable' : 'available'}
                     </Button>
                     <button
-                      aria-label="Remove"
+                      aria-label={`Remove ${e.medicine_name} from this vendor's catalogue`}
                       onClick={() => remove.mutate(e.medicine_id)}
-                      className="rounded-lg p-1.5 text-ink-400 hover:bg-rose-50 hover:text-rose-600"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-400 hover:bg-rose-50 hover:text-rose-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -1807,13 +1813,14 @@ function PurchaseReturnModal({
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button
               variant="primary" loading={createReturn.isPending}
-              disabled={Object.values(qty).every((q) => !q)}
+              disabled={Object.values(qty).every((q) => !q) || !reason.trim()}
               onClick={() => {
                 setError(null);
                 const reqLines = Object.entries(qty).filter(([, q]) => q > 0).map(([purchase_line_id, quantity]) => ({ purchase_line_id, quantity }));
                 if (reqLines.length === 0) { setError('Enter a return quantity for at least one line.'); return; }
+                if (!reason.trim()) { setError('A reason for the return is required.'); return; }
                 createReturn.mutate(
-                  { purchaseId, reason: reason.trim() || null, lines: reqLines },
+                  { purchaseId, reason: reason.trim(), lines: reqLines },
                   { onSuccess: () => { onClose(); toast({ title: 'Purchase return recorded', tone: 'success' }); }, onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not process the return.') }
                 );
               }}
@@ -1855,7 +1862,7 @@ function PurchaseReturnModal({
           </div>
         )}
         <label className="block">
-          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason (optional)</span>
+          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason</span>
           <textarea className="min-h-[60px] w-full rounded-lg border border-ink-200 bg-white p-3 text-[14px] text-ink-900" value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
       </div>
@@ -1945,7 +1952,7 @@ function SalesReturnTab({
           </div>
 
           <label className="block">
-            <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason (optional)</span>
+            <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason</span>
             <textarea className="min-h-[60px] w-full rounded-lg border border-ink-200 bg-white p-3 text-[14px] text-ink-900" value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
 
@@ -1953,14 +1960,15 @@ function SalesReturnTab({
           <div className="flex justify-end">
             <Button
               variant="primary"
-              disabled={Object.values(returnQty).every((q) => !q) || createReturn.isPending}
+              disabled={Object.values(returnQty).every((q) => !q) || !reason.trim() || createReturn.isPending}
               loading={createReturn.isPending}
               onClick={() => {
                 setError(null);
                 const lines = Object.entries(returnQty).filter(([, q]) => q > 0).map(([sale_line_id, quantity]) => ({ sale_line_id, quantity }));
                 if (lines.length === 0) { setError('Enter a return quantity for at least one line.'); return; }
+                if (!reason.trim()) { setError('A reason for the return is required.'); return; }
                 createReturn.mutate(
-                  { saleId: selectedSale.id, reason: reason.trim() || null, lines },
+                  { saleId: selectedSale.id, reason: reason.trim(), lines },
                   {
                     onSuccess: (r) => {
                       toast({ title: 'Return processed', body: `Refunded ${formatINR(Math.round(r.total_refund_paise / 100))}`, tone: 'success' });
@@ -2131,7 +2139,7 @@ function NewIndentModal({ open, onClose, medicines }: { open: boolean; onClose: 
                 </Select>
                 <Input label="Requested qty" type="number" min={1} value={String(line.requested_quantity)} onChange={(e) => updateLine(line.key, { requested_quantity: Number(e.target.value) || 0 })} />
               </div>
-              <button onClick={() => removeLine(line.key)} className="mt-2 text-[12px] font-medium text-rose-600 hover:text-rose-700">Remove line</button>
+              <RemoveLineButton label="Remove line" onClick={() => removeLine(line.key)} />
             </Card>
           ))}
           <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={addLine}>Add medicine</Button>
@@ -2185,7 +2193,7 @@ function IndentDetailModal({
                 <Button variant="ghost" onClick={() => setMode(null)}>Cancel</Button>
                 <Button
                   variant="primary" loading={mode === 'deliver' ? deliver.isPending : doReturn.isPending}
-                  disabled={Object.values(qty).every((q) => !q)}
+                  disabled={Object.values(qty).every((q) => !q) || (mode === 'return' && !reason.trim())}
                   onClick={() => {
                     setError(null);
                     const lines = Object.entries(qty).filter(([, q]) => q > 0).map(([indent_item_id, quantity]) => ({ indent_item_id, quantity }));
@@ -2196,8 +2204,9 @@ function IndentDetailModal({
                         { onSuccess: () => { setMode(null); toast({ title: 'Delivery confirmed', tone: 'success' }); }, onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not confirm delivery.') }
                       );
                     } else {
+                      if (!reason.trim()) { setError('A reason for the return is required.'); return; }
                       doReturn.mutate(
-                        { indentId, reason: reason.trim() || null, lines },
+                        { indentId, reason: reason.trim(), lines },
                         { onSuccess: () => { setMode(null); toast({ title: 'Return processed', tone: 'success' }); }, onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not process the return.') }
                       );
                     }
@@ -2279,7 +2288,7 @@ function IndentDetailModal({
           )}
           {mode === 'return' && (
             <label className="block">
-              <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason (optional)</span>
+              <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason</span>
               <textarea className="min-h-[60px] w-full rounded-lg border border-ink-200 bg-white p-3 text-[14px] text-ink-900" value={reason} onChange={(e) => setReason(e.target.value)} />
             </label>
           )}

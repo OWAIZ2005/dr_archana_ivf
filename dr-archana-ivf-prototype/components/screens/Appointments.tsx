@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '@/lib/store';
 import { cn, TONE, initialsOf } from '@/lib/utils';
-import { Card, CardHeader, Badge, Button, Avatar, SectionTitle, Input, Select, Skeleton, Modal, InfoNote, Tabs } from '@/components/ui/primitives';
+import { Card, CardHeader, Badge, Button, Avatar, SectionTitle, Input, Select, Skeleton, Modal, InfoNote, Tabs, PillFilter } from '@/components/ui/primitives';
 import { useCountUp } from '@/lib/hooks';
 import {
   useAppointments,
@@ -24,7 +24,7 @@ import { useDoctors } from '@/lib/api/users';
 import { useReminders, useCreateReminder, useCompleteReminder, useCancelReminder } from '@/lib/api/reminders';
 import { useCreateCommunication } from '@/lib/api/communications';
 import { ApiError } from '@/lib/api/client';
-import type { AppointmentChannel, AppointmentOut, BatchGroupOut, CommunicationChannel, ReminderOut } from '@/lib/api/types';
+import type { AppointmentBatchOut, AppointmentChannel, AppointmentOut, BatchGroupOut, CommunicationChannel, ReminderOut } from '@/lib/api/types';
 import { COMMUNICATION_OUTCOMES, NOT_ARRIVED_GRACE_PERIOD_MINUTES } from '@/lib/api/types';
 import {
   CalendarClock,
@@ -106,6 +106,56 @@ function useVisitTypeOptions(): string[] {
     }
     return Array.from(set).sort();
   }, [batchesQuery.data]);
+}
+
+/** A Date as a local (not UTC) `datetime-local` input value — matching what
+ * the browser shows for this same instant in a `<input type="datetime-local">`,
+ * which `toISOString()` does not (it's always UTC). */
+function toLocalDatetimeValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** "HH:MM" out of a `datetime-local` input value ("YYYY-MM-DDTHH:MM"), or
+ * null when the value isn't complete yet. */
+function timeOfDay(scheduledAtLocal: string): string | null {
+  const idx = scheduledAtLocal.indexOf('T');
+  if (idx === -1 || scheduledAtLocal.length < idx + 6) return null;
+  return scheduledAtLocal.slice(idx + 1, idx + 6);
+}
+
+/** The active batch a visit type + time would actually land in, or null
+ * when none matches — i.e. the appointment would fall into "Unbatched". */
+function findMatchingBatch(
+  visitType: string, scheduledAtLocal: string, batches: AppointmentBatchOut[]
+): AppointmentBatchOut | null {
+  const time = timeOfDay(scheduledAtLocal);
+  if (!visitType || !time) return null;
+  return (
+    batches.find(
+      (b) => b.is_active && b.visit_types.includes(visitType) && b.start_time.slice(0, 5) <= time && time < b.end_time.slice(0, 5)
+    ) ?? null
+  );
+}
+
+/** Warns before booking creates a silently "Unbatched" appointment — the
+ * visit type is valid and the slot picker doesn't stop the user, but if no
+ * configured batch covers this visit type at this time, the appointment
+ * won't get a token, won't count against any batch's capacity, and won't
+ * show up grouped in Today's Batches. Better to say so now than to have
+ * front-desk staff discover it later in "Unbatched Appointments". */
+function BatchMismatchWarning({ visitType, scheduledAt }: { visitType: string; scheduledAt: string }) {
+  const batchesQuery = useAppointmentBatches();
+  const batches = batchesQuery.data ?? [];
+  const time = timeOfDay(scheduledAt);
+  if (!visitType || !time || batches.length === 0) return null;
+  if (findMatchingBatch(visitType, scheduledAt, batches)) return null;
+  return (
+    <InfoNote tone="amber" icon={<AlertTriangle className="h-4 w-4" />}>
+      No configured batch covers <strong>{visitType}</strong> at this time — this appointment will be booked as
+      "Unbatched": no token number, no capacity tracking, and it won't appear grouped under Today's Batches.
+    </InfoNote>
+  );
 }
 
 /** The "New Patient" quick-add step of the booking wizard. Checks for
@@ -308,6 +358,7 @@ function BookingModal({ open, onClose }: { open: boolean; onClose: () => void })
               value={notes} onChange={(e) => setNotes(e.target.value)}
             />
           </label>
+          <BatchMismatchWarning visitType={visitType} scheduledAt={scheduledAt} />
           {error && (
             <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
@@ -416,6 +467,10 @@ function EditAppointmentModal({
         <Select label="Doctor" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
           {doctors.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
         </Select>
+        <BatchMismatchWarning
+          visitType={visitType}
+          scheduledAt={toLocalDatetimeValue(new Date(appointment.scheduled_at))}
+        />
         {error && (
           <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
@@ -523,26 +578,46 @@ function ContactPatientModal({
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2">
-          <a
-            href={patient?.phone ? `tel:${patient.phone}` : undefined}
-            onClick={() => setChannel('call')}
-            className={cn(
-              'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-[13px] font-medium transition-colors',
-              !patient?.phone ? 'cursor-not-allowed border-ink-100 text-ink-300' : channel === 'call' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
-            )}
-          >
-            <Phone className="h-4 w-4" /> {patient?.phone ? `Call ${patient.phone}` : 'No phone on file'}
-          </a>
-          <a
-            href={patient?.email ? `mailto:${patient.email}` : undefined}
-            onClick={() => setChannel('email')}
-            className={cn(
-              'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-[13px] font-medium transition-colors',
-              !patient?.email ? 'cursor-not-allowed border-ink-100 text-ink-300' : channel === 'email' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
-            )}
-          >
-            <Mail className="h-4 w-4" /> {patient?.email ? `Email ${patient.email}` : 'No email on file'}
-          </a>
+          {patient?.phone ? (
+            <a
+              href={`tel:${patient.phone}`}
+              onClick={() => setChannel('call')}
+              className={cn(
+                'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-[13px] font-medium transition-colors',
+                channel === 'call' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+              )}
+            >
+              <Phone className="h-4 w-4" /> Call {patient.phone}
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex cursor-not-allowed flex-col items-center gap-1.5 rounded-xl border border-ink-100 p-3 text-[13px] font-medium text-ink-300"
+            >
+              <Phone className="h-4 w-4" /> No phone on file
+            </button>
+          )}
+          {patient?.email ? (
+            <a
+              href={`mailto:${patient.email}`}
+              onClick={() => setChannel('email')}
+              className={cn(
+                'flex flex-col items-center gap-1.5 rounded-xl border p-3 text-[13px] font-medium transition-colors',
+                channel === 'email' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'
+              )}
+            >
+              <Mail className="h-4 w-4" /> Email {patient.email}
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex cursor-not-allowed flex-col items-center gap-1.5 rounded-xl border border-ink-100 p-3 text-[13px] font-medium text-ink-300"
+            >
+              <Mail className="h-4 w-4" /> No email on file
+            </button>
+          )}
         </div>
         <Select label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
           {COMMUNICATION_OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -719,6 +794,67 @@ function TodayBatchesView({ day }: { day: string }) {
   );
 }
 
+/** Cancelling always needs a reason (the backend records it against the
+ * appointment's history), so this collects one the same way every other
+ * reason-requiring action in this screen does — a Modal with a required
+ * textarea — rather than `window.prompt()`, which isn't just inconsistent
+ * with the rest of the app but can throw outright in some embedded/kiosk
+ * browser contexts, silently failing the cancel with no feedback at all. */
+function CancelAppointmentModal({
+  appointment, onClose,
+}: {
+  appointment: AppointmentOut;
+  onClose: () => void;
+}) {
+  const { toast } = useApp();
+  const updateStatus = useUpdateAppointmentStatus();
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    if (!reason.trim()) { setError('A reason for cancelling is required.'); return; }
+    setError(null);
+    updateStatus.mutate(
+      { appointmentId: appointment.id, status: 'cancelled', reason: reason.trim() },
+      {
+        onSuccess: () => { toast({ title: 'Appointment cancelled', tone: 'success' }); onClose(); },
+        onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not cancel this appointment.'),
+      }
+    );
+  };
+
+  return (
+    <Modal
+      open onClose={onClose} title="Cancel Appointment" subtitle={appointment.visit_type}
+      footer={
+        <>
+          <Button onClick={onClose}>Back</Button>
+          <Button variant="danger" loading={updateStatus.isPending} onClick={submit}>Cancel Appointment</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <InfoNote>
+          {new Date(appointment.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+        </InfoNote>
+        <label className="block">
+          <span className="mb-1.5 block text-[13.5px] font-medium text-ink-700">Reason for cancelling</span>
+          <textarea
+            className="min-h-[70px] w-full rounded-lg border border-ink-200 bg-white p-3 text-[14px] text-ink-900"
+            placeholder="Patient requested cancellation…" value={reason} onChange={(e) => setReason(e.target.value)}
+          />
+        </label>
+        {error && (
+          <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+            <p className="text-[13.5px] leading-relaxed text-rose-700">{error}</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 // =========================================================================
 // Future Appointment Details
 // =========================================================================
@@ -730,10 +866,9 @@ function FutureAppointmentsTab() {
   const [q, setQ] = useState('');
   const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentOut | null>(null);
   const [contactTarget, setContactTarget] = useState<AppointmentOut | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<AppointmentOut | null>(null);
   const patientsQuery = usePatients();
   const doctorsQuery = useDoctors();
-  const updateStatus = useUpdateAppointmentStatus();
-  const { toast } = useApp();
 
   const futureQuery = useFutureAppointments({ from_date: fromDate || undefined, to_date: toDate || undefined, q: q || undefined });
   const rows = futureQuery.data ?? [];
@@ -749,19 +884,11 @@ function FutureAppointmentsTab() {
     return map;
   }, [doctorsQuery.data]);
 
-  const cancel = (appt: AppointmentOut) => {
-    const reason = window.prompt('Reason for cancelling (required):');
-    if (!reason || !reason.trim()) return;
-    updateStatus.mutate(
-      { appointmentId: appt.id, status: 'cancelled', reason: reason.trim() },
-      { onSuccess: () => toast({ title: 'Appointment cancelled', tone: 'success' }), onError: (e) => toast({ title: 'Could not cancel', body: e instanceof ApiError ? e.message : undefined, tone: 'error' }) }
-    );
-  };
-
   return (
     <div className="space-y-4">
       {rescheduleTarget && <RescheduleModal appointment={rescheduleTarget} onClose={() => setRescheduleTarget(null)} />}
       {contactTarget && <ContactPatientModal patientId={contactTarget.patient_id} appointmentId={contactTarget.id} onClose={() => setContactTarget(null)} />}
+      {cancelTarget && <CancelAppointmentModal appointment={cancelTarget} onClose={() => setCancelTarget(null)} />}
       <Card className="p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <Input label="From" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
@@ -791,7 +918,7 @@ function FutureAppointmentsTab() {
                 {appt.status === 'registered' && <Button size="sm" onClick={() => setRescheduleTarget(appt)}>Reschedule</Button>}
                 <Button size="sm" variant="ghost" onClick={() => setContactTarget(appt)}>Contact</Button>
                 {(appt.status === 'registered' || appt.status === 'arrived' || appt.status === 'waiting') && (
-                  <Button size="sm" variant="ghost" onClick={() => cancel(appt)}>Cancel</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setCancelTarget(appt)}>Cancel</Button>
                 )}
               </div>
             </div>
@@ -935,6 +1062,7 @@ function PhoneCallBookingForm({ onBooked }: { onBooked: () => void }) {
           value={description} onChange={(e) => setDescription(e.target.value)}
         />
       </label>
+      <BatchMismatchWarning visitType={visitType} scheduledAt={scheduledAt} />
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
@@ -1097,7 +1225,7 @@ function ReminderRow({ reminder, patientName }: { reminder: ReminderOut; patient
 
 function RemindersTab() {
   const patientsQuery = usePatients();
-  const [statusFilter, setStatusFilter] = useState<'pending' | 'completed' | 'cancelled' | undefined>('pending');
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'completed' | 'cancelled'>('pending');
   const remindersQuery = useReminders(statusFilter);
   const rows = remindersQuery.data ?? [];
 
@@ -1111,20 +1239,12 @@ function RemindersTab() {
     <div className="space-y-4">
       <NewReminderForm onCreated={() => {}} />
       <Card className="p-3">
-        <div className="scroll-area flex gap-1 overflow-x-auto rounded-lg bg-ink-100 p-1">
-          {(['pending', 'completed', 'cancelled'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={cn(
-                'shrink-0 rounded-md px-3 py-1.5 text-[13.5px] font-medium capitalize transition-all',
-                statusFilter === s ? 'bg-white text-ink-900 shadow-card' : 'text-ink-500 hover:text-ink-800'
-              )}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <PillFilter
+          label="Filter reminders by status"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={(['pending', 'completed', 'cancelled'] as const).map((s) => ({ id: s, label: s }))}
+        />
       </Card>
       <Card className="overflow-hidden">
         {rows.length === 0 ? (
@@ -1276,20 +1396,12 @@ export function Appointments() {
           <div className="lg:min-w-[240px] lg:flex-1">
             <Input placeholder="Search patient or visit type…" icon={<Search className="h-3.5 w-3.5" />} value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <div className="scroll-area flex min-w-0 gap-1 overflow-x-auto rounded-lg bg-ink-100 p-1">
-            {STATUS_FILTERS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatus(s)}
-                className={cn(
-                  'shrink-0 rounded-md px-3 py-1.5 text-[13.5px] font-medium transition-all',
-                  status === s ? 'bg-white text-ink-900 shadow-card' : 'text-ink-500 hover:text-ink-800'
-                )}
-              >
-                {s === 'All' ? 'All' : STATUS_LABEL[s]}
-              </button>
-            ))}
-          </div>
+          <PillFilter
+            label="Filter by status"
+            value={status}
+            onChange={setStatus}
+            options={STATUS_FILTERS.map((s) => ({ id: s, label: s === 'All' ? 'All' : STATUS_LABEL[s] }))}
+          />
         </div>
       </Card>
 

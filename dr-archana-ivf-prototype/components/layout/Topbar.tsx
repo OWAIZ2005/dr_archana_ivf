@@ -90,14 +90,21 @@ export function Topbar({ onOpenMobileNav }: { onOpenMobileNav: () => void }) {
         </h1>
       </div>
 
-      {/* Search — desktop */}
+      {/* Search — desktop. The label needs `truncate` (not just `flex-1`):
+          when the header runs short on space (e.g. exactly 1024px — iPad
+          landscape), flexbox squeezes this button below its intended
+          300px, and without truncation the untruncated label wraps to
+          several lines, spilling out of the fixed-height bar and over the
+          screen title next to it. Left free to shrink (no shrink-0) so it
+          still yields room to the controls after it instead of overflowing
+          the header. */}
       <button
         onClick={() => setPaletteOpen(true)}
-        className="group ml-auto hidden h-10 w-[300px] items-center gap-2.5 rounded-lg border border-ink-200 bg-ink-50/70 px-3 text-[14px] text-ink-500 transition-all hover:border-ink-300 hover:bg-white lg:flex"
+        className="group ml-auto hidden h-10 w-[300px] min-w-0 items-center gap-2.5 rounded-lg border border-ink-200 bg-ink-50/70 px-3 text-[14px] text-ink-500 transition-all hover:border-ink-300 hover:bg-white lg:flex"
       >
-        <Search className="h-4 w-4" />
-        <span className="flex-1 text-left">Search patients, cycles, embryos…</span>
-        <kbd className="rounded border border-ink-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-ink-400">
+        <Search className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1 truncate text-left">Search patients, cycles, embryos…</span>
+        <kbd className="shrink-0 rounded border border-ink-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-ink-400">
           ⌘K
         </kbd>
       </button>

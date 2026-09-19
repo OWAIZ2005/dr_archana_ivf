@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { Badge, Button, Card, CardHeader, InfoNote, Input, Modal, Select, Switch } from '@/components/ui/primitives';
+import { Badge, Button, Card, CardHeader, InfoNote, Input, Modal, RemoveLineButton, Select, Switch } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api/client';
 import {
   useCreateIndentTemplate, useDuplicateIndentTemplate, useIndentTemplates, usePharmacySettings, useUpdateIndentTemplate, useUpdatePharmacySettings,
@@ -187,7 +187,7 @@ function NewIndentTemplateModal({ open, onClose, medicines }: { open: boolean; o
                 </Select>
                 <Input label="Default qty" type="number" min={1} value={String(line.default_quantity)} onChange={(e) => updateLine(line.key, { default_quantity: Number(e.target.value) || 0 })} />
               </div>
-              <button onClick={() => removeLine(line.key)} className="mt-2 text-[12px] font-medium text-rose-600 hover:text-rose-700">Remove line</button>
+              <RemoveLineButton label="Remove line" onClick={() => removeLine(line.key)} />
             </Card>
           ))}
           <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={addLine}>Add medicine</Button>

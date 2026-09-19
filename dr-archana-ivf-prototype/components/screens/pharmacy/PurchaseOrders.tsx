@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { Badge, Button, Card, InfoNote, Input, Modal, Select } from '@/components/ui/primitives';
+import { Badge, Button, Card, InfoNote, Input, Modal, RemoveLineButton, Select } from '@/components/ui/primitives';
 import { formatINR } from '@/lib/utils';
 import { ApiError } from '@/lib/api/client';
 import {
@@ -10,7 +10,7 @@ import {
   type MedicineOut, type POItemIn, type POOut, type POStatus,
 } from '@/lib/api/pharmacy';
 import type { VendorOut } from '@/lib/api/purchasing';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 const PO_STATUS_LABEL: Record<POStatus, string> = {
   DRAFT: 'Draft', PENDING_APPROVAL: 'Pending Approval', APPROVED: 'Approved',
@@ -150,7 +150,7 @@ function NewPOModal({ open, onClose, vendors, medicines }: { open: boolean; onCl
                 <Input label="Discount %" type="number" value={String(line.discount_percent ?? 0)} onChange={(e) => updateLine(line.key, { discount_percent: Number(e.target.value) || 0 })} />
                 <Input label="Expected expiry" type="date" value={line.expected_expiry ?? ''} onChange={(e) => updateLine(line.key, { expected_expiry: e.target.value || null })} />
               </div>
-              <button onClick={() => removeLine(line.key)} className="mt-2 text-[12px] font-medium text-rose-600 hover:text-rose-700">Remove line</button>
+              <RemoveLineButton label="Remove line" onClick={() => removeLine(line.key)} />
             </Card>
           ))}
           <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={addLine}>Add medicine</Button>

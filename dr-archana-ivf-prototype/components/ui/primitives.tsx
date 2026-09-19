@@ -3,7 +3,7 @@
 import React from 'react';
 import { cn, TONE } from '@/lib/utils';
 import type { StatusTone } from '@/lib/data';
-import { Check, X, AlertTriangle, Info, ChevronRight } from 'lucide-react';
+import { Check, X, AlertTriangle, Info, ChevronRight, Trash2 } from 'lucide-react';
 
 /* ============================================================
    SURFACE
@@ -155,6 +155,35 @@ export function Button({
       {children}
       {iconRight}
     </button>
+  );
+}
+
+/** A labeled "remove this line" action for repeatable form rows (a bill
+ *  line, a purchase line, a template item…). Renders at the same 36px `sm`
+ *  Button height as every other small action in these forms — several
+ *  screens used to hand-roll a bare, unpadded `<button>` here instead,
+ *  which measured 18px tall in practice, well under any tappable size. */
+export function RemoveLineButton({
+  onClick,
+  label = 'Remove',
+  disabled,
+}: {
+  onClick: () => void;
+  label?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      disabled={disabled}
+      icon={<Trash2 className="h-3.5 w-3.5" />}
+      onClick={onClick}
+      className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+    >
+      {label}
+    </Button>
   );
 }
 
@@ -369,9 +398,50 @@ export function Tabs({
   );
 }
 
+/** A compact filter bar of mutually-exclusive pill buttons inside a track —
+ *  visually distinct from `Tabs` (which navigates between whole views) so
+ *  screens that filter content in place don't get a false "you switched
+ *  screens" cue, but shared as one component instead of each screen
+ *  hand-rolling its own copy of the same pill markup. */
+export function PillFilter<T extends string>({
+  value,
+  onChange,
+  options,
+  label,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { id: T; label: string }[];
+  label?: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="scroll-area flex min-w-0 gap-1 overflow-x-auto rounded-lg bg-ink-100 p-1">
+      {options.map((o) => {
+        const active = o.id === value;
+        return (
+          <button
+            key={o.id}
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(o.id)}
+            className={cn(
+              'shrink-0 rounded-md px-3 py-1.5 text-[13.5px] font-medium capitalize transition-all',
+              active ? 'bg-white text-ink-900 shadow-card' : 'text-ink-500 hover:text-ink-800'
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ============================================================
    MODAL
    ============================================================ */
+let modalIdCounter = 0;
+
 export function Modal({
   open,
   onClose,
@@ -389,12 +459,37 @@ export function Modal({
   footer?: React.ReactNode;
   width?: string;
 }) {
+  const titleId = React.useRef(`modal-title-${++modalIdCounter}`).current;
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
   React.useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+
+  // Moves focus into the dialog on open (the first focusable element, or the
+  // panel itself as a fallback) so keyboard/screen-reader users land inside
+  // it rather than on whatever was focused on the page behind it.
+  React.useEffect(() => {
+    if (!open || !panelRef.current) return;
+    const focusable = panelRef.current.querySelector<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled])'
+    );
+    (focusable ?? panelRef.current).focus();
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -403,10 +498,17 @@ export function Modal({
         className="absolute inset-0 bg-ink-950/25 backdrop-blur-[3px] animate-fade-in"
         onClick={onClose}
       />
-      <div className={cn('modal-in relative max-h-[90vh] w-full overflow-hidden rounded-2xl bg-white shadow-pop flex flex-col', width)}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={cn('modal-in relative max-h-[90vh] w-full overflow-hidden rounded-2xl bg-white shadow-pop flex flex-col', width)}
+      >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-ink-100 px-4 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
-            <h3 className="text-[16.5px] font-semibold tracking-[-0.014em] text-ink-900 sm:text-[18px]">{title}</h3>
+            <h3 id={titleId} className="text-[16.5px] font-semibold tracking-[-0.014em] text-ink-900 sm:text-[18px]">{title}</h3>
             {subtitle && <p className="mt-1 text-[13.5px] text-ink-500 sm:text-[14px]">{subtitle}</p>}
           </div>
           <button
