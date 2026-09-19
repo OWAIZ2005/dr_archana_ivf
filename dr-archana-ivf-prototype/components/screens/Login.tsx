@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '@/lib/auth';
 import { USERS, type Role } from '@/lib/data';
 import { ApiError } from '@/lib/api/client';
+import { isPasskeySupported } from '@/lib/webauthn';
 import { cn } from '@/lib/utils';
 import { Button, Input } from '@/components/ui/primitives';
 import { useSequence } from '@/lib/hooks';
@@ -18,6 +19,7 @@ import {
   Check,
   ArrowRight,
   Fingerprint,
+  ScanFace,
   AlertTriangle,
   Pill,
 } from 'lucide-react';
@@ -43,15 +45,23 @@ const DEMO_PASSWORD = 'ChangeMe123!';
 const MIN_STEP_MS = AUTH_STEPS.length * 420 + 320;
 
 export function Login() {
-  const { login } = useAuth();
+  const { login, loginWithPasskey } = useAuth();
   const [selected, setSelected] = useState<Role>('doctor');
   const [email, setEmail] = useState(ROLE_CARDS[0].email);
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [showPass, setShowPass] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
+  const [passkeyAttempting, setPasskeyAttempting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const step = useSequence(AUTH_STEPS.length, 420, authenticating);
   const attemptId = useRef(0);
+  // Evaluated once on mount, not during render, so server and client agree
+  // on the first paint — matching the hydration-safety rule this codebase
+  // already follows for preferences (see lib/preferences.tsx). navigator
+  // doesn't exist during SSR at all, so this can never be a useState
+  // initializer either.
+  const [passkeySupported, setPasskeySupported] = useState(false);
+  React.useEffect(() => setPasskeySupported(isPasskeySupported()), []);
 
   const selectRole = (r: Role) => {
     setSelected(r);
@@ -88,6 +98,28 @@ export function Login() {
           );
         }, Math.min(remaining, 600));
       });
+  };
+
+  const handlePasskeySubmit = () => {
+    if (authenticating || passkeyAttempting) return;
+    setError(null);
+    setPasskeyAttempting(true);
+    loginWithPasskey()
+      .catch((err: unknown) => {
+        // A cancelled Face ID prompt (user tapped away, or backed out of
+        // the system sheet) is not a "wrong password"-shaped failure — it
+        // shouldn't read as an account/system problem.
+        const message =
+          err instanceof DOMException && err.name === 'NotAllowedError'
+            ? 'Face ID / Touch ID was cancelled.'
+            : err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+            ? err.message
+            : 'Could not sign in with a passkey. Use your password instead.';
+        setError(message);
+      })
+      .finally(() => setPasskeyAttempting(false));
   };
 
   const user = USERS[selected];
@@ -306,11 +338,7 @@ export function Login() {
                 )}
               </div>
 
-              <div className="mt-4 flex items-center justify-between">
-                <label className="flex cursor-pointer items-center gap-2 text-[13.5px] text-ink-600">
-                  <input type="checkbox" defaultChecked className="h-3.5 w-3.5 rounded border-ink-300 text-brand-600" />
-                  Trust this device
-                </label>
+              <div className="mt-4 flex items-center justify-end">
                 <button className="text-[13.5px] font-medium text-brand-700 hover:text-brand-800">
                   Forgot password?
                 </button>
@@ -326,6 +354,29 @@ export function Login() {
               >
                 Sign In Securely
               </Button>
+
+              {passkeySupported && (
+                <>
+                  <div className="my-4 flex items-center gap-3">
+                    <span className="h-px flex-1 bg-ink-200" />
+                    <span className="text-[12px] font-medium uppercase tracking-[0.08em] text-ink-400">or</span>
+                    <span className="h-px flex-1 bg-ink-200" />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="w-full"
+                    icon={<ScanFace className="h-4 w-4" />}
+                    loading={passkeyAttempting}
+                    onClick={handlePasskeySubmit}
+                  >
+                    {passkeyAttempting ? 'Waiting for Face ID / Touch ID…' : 'Sign in with Face ID / Touch ID'}
+                  </Button>
+                  <p className="mt-2 text-center text-[12px] text-ink-400">
+                    Only works if a passkey was already registered for your account on this device — set one up from Settings once signed in.
+                  </p>
+                </>
+              )}
 
               <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-ink-200/70 bg-ink-50/70 p-3">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />

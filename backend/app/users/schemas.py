@@ -18,6 +18,14 @@ class UserSummary(BaseModel):
     # still enforces) capabilities the user lacks, e.g. the asset "Move"
     # action. Other UserSummary producers leave it empty.
     permissions: list[str] = []
+    # Settings.IDLE_TIMEOUT_MINUTES, echoed back so the frontend's idle-lock
+    # overlay (lib/idleLock.tsx) can match the server's own idle-timeout
+    # window instead of hardcoding a guess that could silently drift from
+    # it. Same "populated by GET /auth/me only" convention as permissions
+    # above — this is app-wide config, not really a per-user field, but
+    # /auth/me is the one place the frontend already fetches on every
+    # login/session-restore, so it's the natural carrier.
+    idle_timeout_minutes: int | None = None
 
 
 class UserCreate(BaseModel):

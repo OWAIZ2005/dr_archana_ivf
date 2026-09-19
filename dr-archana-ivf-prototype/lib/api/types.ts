@@ -26,6 +26,9 @@ export interface UserSummary {
    * hide capabilities the user lacks — the backend still enforces every
    * action. Absent when the summary comes from an endpoint that omits it. */
   permissions?: string[];
+  /** Settings.IDLE_TIMEOUT_MINUTES, from GET /auth/me only — see
+   * lib/idleLock.tsx, which uses this instead of a hardcoded guess. */
+  idle_timeout_minutes?: number | null;
 }
 
 // ---- patients -----------------------------------------------------------

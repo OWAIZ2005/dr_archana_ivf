@@ -4,11 +4,13 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useApp } from '@/lib/store';
 import { CRYO_HIERARCHY, PATIENT, EMBRYOS } from '@/lib/data';
 import { cn } from '@/lib/utils';
-import { Card, CardHeader, Badge, Button, SectionTitle, Field, InfoNote, DataRow } from '@/components/ui/primitives';
-import { useCoupleForPatient, usePatientSummary } from '@/lib/api/patients';
+import { Card, CardHeader, Badge, Button, SectionTitle, Field, InfoNote, DataRow, Modal } from '@/components/ui/primitives';
+import { useCoupleForPatient, usePatientSummary, useUploadPatientDocument } from '@/lib/api/patients';
 import { useActiveCycle } from '@/lib/api/ivf';
 import { useEmbryosForCycle } from '@/lib/api/embryology';
 import { useCryoLocationsForCycle, useCustodyHistory } from '@/lib/api/cryostorage';
+import { SignatureCapture } from '@/components/ui/SignatureCapture';
+import { ApiError } from '@/lib/api/client';
 import {
   Snowflake,
   ChevronRight,
@@ -20,12 +22,57 @@ import {
   Container,
 } from 'lucide-react';
 
+/** The actual capture step of "Renew Consent" — a couple's storage consent
+ * must be re-signed periodically (see the Next Renewal metric above). Reuses
+ * the same PatientDocument/MinIO pipeline every other signature in this app
+ * goes through, tagged so it's distinguishable from the original intake
+ * consent captured at Registration. */
+function RenewConsentModal({ patientId, onClose }: { patientId: string; onClose: () => void }) {
+  const { toast } = useApp();
+  const upload = useUploadPatientDocument();
+  const [signature, setSignature] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    if (!signature) return;
+    setError(null);
+    upload.mutate(
+      { patientId, documentType: 'consent_signature_renewal', file: signature },
+      {
+        onSuccess: () => { toast({ title: 'Consent renewed', body: 'Storage consent re-signed and filed.', tone: 'success' }); onClose(); },
+        onError: (e) => setError(e instanceof ApiError ? e.message : 'Could not save the renewed consent.'),
+      }
+    );
+  };
+
+  return (
+    <Modal
+      open onClose={onClose} title="Renew Storage Consent"
+      subtitle="Re-signed on this device — finger, stylus or Apple Pencil"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!signature} loading={upload.isPending} onClick={submit}>
+            Save Renewal
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <SignatureCapture idPrefix="cryo-renewal" label="Patient signature" value={signature} onChange={setSignature} />
+        {error && <p className="text-[13px] text-rose-600">{error}</p>}
+      </div>
+    </Modal>
+  );
+}
+
 function fmtDate(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 }
 
 export function Cryostorage() {
-  const { toast, selectedPatientId } = useApp();
+  const { selectedPatientId } = useApp();
+  const [renewOpen, setRenewOpen] = useState(false);
   const summaryQuery = usePatientSummary(selectedPatientId);
   const coupleQuery = useCoupleForPatient(selectedPatientId);
   const cycleQuery = useActiveCycle(coupleQuery.data?.id ?? null);
@@ -89,6 +136,9 @@ export function Cryostorage() {
 
   return (
     <div className="screen-enter mx-auto max-w-[1300px] space-y-5 p-4 sm:p-6 lg:p-8">
+      {renewOpen && selectedPatientId && (
+        <RenewConsentModal patientId={selectedPatientId} onClose={() => setRenewOpen(false)} />
+      )}
       <SectionTitle
         eyebrow="Laboratory"
         title="Cryostorage Management"
@@ -97,7 +147,7 @@ export function Cryostorage() {
           <Button
             variant="primary"
             icon={<FileSignature className="h-4 w-4" />}
-            onClick={() => toast({ title: 'Consent renewal initiated', body: 'Renewal request sent to the couple for signature.', tone: 'success' })}
+            onClick={() => setRenewOpen(true)}
           >
             Renew Consent
           </Button>

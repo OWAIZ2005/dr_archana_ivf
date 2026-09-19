@@ -6,7 +6,8 @@ import { useAuth } from '@/lib/auth';
 import { TRANSFER_CHECKLIST, EMBRYOS, PATIENT, PARTNER } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { Card, CardHeader, Badge, Button, SectionTitle, Field, InfoNote, Modal } from '@/components/ui/primitives';
-import { useCoupleForPatient, usePatientSummary } from '@/lib/api/patients';
+import { useCoupleForPatient, usePatientSummary, useUploadPatientDocument } from '@/lib/api/patients';
+import { SignatureCapture } from '@/components/ui/SignatureCapture';
 import { useActiveCycle } from '@/lib/api/ivf';
 import { useEmbryosForCycle } from '@/lib/api/embryology';
 import {
@@ -34,6 +35,9 @@ export function Transfer() {
   const [checked, setChecked] = useState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [running, setRunning] = useState(false);
+  const [witnessClinicianSig, setWitnessClinicianSig] = useState<File | null>(null);
+  const [witnessEmbryologistSig, setWitnessEmbryologistSig] = useState<File | null>(null);
+  const uploadSignature = useUploadPatientDocument();
 
   const summaryQuery = usePatientSummary(selectedPatientId);
   const coupleQuery = useCoupleForPatient(selectedPatientId);
@@ -115,13 +119,34 @@ export function Transfer() {
     if (hasRealData && realTransfer) {
       setRunning(true);
       completeTransferMutation.mutate(realTransfer.id, {
-        onSuccess: () => {
+        onSuccess: async () => {
+          // The transfer itself is already recorded at this point — a
+          // signature-upload failure is surfaced as a non-fatal warning
+          // (same pattern as the registration-photo upload) rather than
+          // rolling back or blocking a procedure that has already happened.
+          const failed: string[] = [];
+          if (selectedPatientId && witnessClinicianSig) {
+            try {
+              await uploadSignature.mutateAsync({ patientId: selectedPatientId, documentType: 'consent_signature_witness_clinician', file: witnessClinicianSig });
+            } catch {
+              failed.push('clinician');
+            }
+          }
+          if (selectedPatientId && witnessEmbryologistSig) {
+            try {
+              await uploadSignature.mutateAsync({ patientId: selectedPatientId, documentType: 'consent_signature_witness_embryologist', file: witnessEmbryologistSig });
+            } catch {
+              failed.push('embryologist');
+            }
+          }
           setRunning(false);
           setConfirm(false);
           toast({
             title: 'Embryo transfer completed',
-            body: 'Procedure recorded. Luteal support prescribed.',
-            tone: 'success',
+            body: failed.length
+              ? `Procedure recorded. The ${failed.join(' and ')} witness signature could not be saved — capture it again from the patient profile.`
+              : 'Procedure recorded. Luteal support prescribed.',
+            tone: failed.length ? 'warning' : 'success',
           });
           setTimeout(() => go('pregnancy'), 900);
         },
@@ -390,10 +415,16 @@ export function Transfer() {
         subtitle="This action is final and will be recorded in the permanent medical record."
         footer={
           <>
-            <Button onClick={() => setConfirm(false)} disabled={running}>
+            <Button onClick={() => { setConfirm(false); setWitnessClinicianSig(null); setWitnessEmbryologistSig(null); }} disabled={running}>
               Cancel
             </Button>
-            <Button variant="primary" loading={running} icon={<Check className="h-4 w-4" />} onClick={runTransfer}>
+            <Button
+              variant="primary"
+              loading={running}
+              disabled={hasRealData && (!witnessClinicianSig || !witnessEmbryologistSig)}
+              icon={<Check className="h-4 w-4" />}
+              onClick={runTransfer}
+            >
               {running ? 'Recording procedure…' : 'Confirm & Complete'}
             </Button>
           </>
@@ -421,9 +452,24 @@ export function Transfer() {
           </div>
 
           <InfoNote tone="neutral" icon={<FileSignature className="h-4 w-4" />}>
-            All six safety verifications have been confirmed. A double-witness signature will be
-            captured and the event written to the audit trail with a timestamp.
+            All six safety verifications have been confirmed. Capture the double-witness signature
+            below to complete the procedure — it is written to the audit trail with a timestamp.
           </InfoNote>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SignatureCapture
+              idPrefix="transfer-witness-clinician"
+              label="Witness — Clinician"
+              value={witnessClinicianSig}
+              onChange={setWitnessClinicianSig}
+            />
+            <SignatureCapture
+              idPrefix="transfer-witness-embryologist"
+              label="Witness — Embryologist"
+              value={witnessEmbryologistSig}
+              onChange={setWitnessEmbryologistSig}
+            />
+          </div>
         </div>
       </Modal>
     </div>

@@ -13,6 +13,9 @@ psycopg2-binary==2.9.10
 argon2-cffi==23.1.0
 pyjwt==2.10.1
 python-multipart==0.0.20
+# Passkeys (WebAuthn/Face ID/Touch ID login) — additive to the password
+# flow in app/auth, not a replacement. See app/webauthn/.
+webauthn==2.7.1
 # Laboratory report extraction: digital-PDF text + word-box geometry
 # (pure Python, pdfminer.six) and OCR for scanned/image reports.
 # pytesseract is a thin wrapper over the system `tesseract` binary — the

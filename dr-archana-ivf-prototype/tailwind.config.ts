@@ -8,6 +8,13 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // iPad Split View / Slide Over can run this app in a pane as narrow
+      // as ~320-378px — well below the `sm` (640px) breakpoint everything
+      // else in this file assumes is "mobile". `xs` gives layout code a
+      // hook for that specific range instead of degrading silently.
+      screens: {
+        xs: '378px',
+      },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         display: ['var(--font-display)', 'Georgia', 'serif'],

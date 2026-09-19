@@ -50,6 +50,24 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_MINUTES: int = 15
 
+    # ---- Passkeys (WebAuthn / Face ID / Touch ID) ----
+    # An additive login option (app/webauthn/), never a replacement for the
+    # password flow above — a shared clinic iPad can't reliably enroll every
+    # receptionist's face, so password stays the fallback that always works.
+    # RP_ID must be the bare domain (no scheme/port) and must exactly match
+    # what the browser sees as the page's domain — "localhost" for local
+    # dev, the real domain in production. ORIGIN(s) are the full origin(s)
+    # the frontend is actually served from; WebAuthn refuses to complete a
+    # ceremony against a mismatched origin (this is the anti-phishing
+    # property that makes a passkey unphishable, so don't relax it).
+    WEBAUTHN_RP_ID: str = "localhost"
+    WEBAUTHN_RP_NAME: str = "Dr. Archana IVF & Women Centre"
+    WEBAUTHN_ORIGIN: list[str] = ["http://localhost:3100"]
+    # How long a generated registration/login challenge stays valid — long
+    # enough for Face ID's prompt-and-confirm, short enough that a captured
+    # options response is useless shortly after.
+    WEBAUTHN_CHALLENGE_TTL_SECONDS: int = 300
+
     # ---- CORS (frontend origin, LAN only) ----
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://hmis.archanaivf.in"]
 

@@ -162,7 +162,18 @@ export function AppShell() {
   if (!role) return <Login />;
 
   return (
-    <div className={cn('flex h-screen w-full overflow-hidden bg-ink-50', preferenceClasses(prefs))}>
+    <div
+      className={cn(
+        // Only bites once installed as a standalone PWA with
+        // viewport-fit=cover (app/layout.tsx) — env() resolves to 0px in an
+        // ordinary browser tab, so this is a no-op there. Applied on the
+        // outermost shell rather than inside Topbar/Sidebar individually so
+        // it can't fight their own fixed heights.
+        'flex h-screen w-full overflow-hidden bg-ink-50',
+        'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
+        preferenceClasses(prefs)
+      )}
+    >
       <Sidebar
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}

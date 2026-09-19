@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Boxes,
+  Camera,
   CheckCircle2,
   Download,
   History,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import { Badge, Button, Card, CardHeader, Field, InfoNote, Input, Modal, SectionTitle, Select } from '@/components/ui/primitives';
+import { QrScannerView } from '@/components/ui/QrScanner';
 import { useApp } from '@/lib/store';
 import { ApiError, apiFetchBlob } from '@/lib/api/client';
 import {
@@ -294,7 +296,7 @@ function MobileAssetScan({ assetId }: { assetId: string | null }) {
 // =========================================================================
 
 function AssetList() {
-  const { openAsset } = useApp();
+  const { openAsset, toast } = useApp();
   const [q, setQ] = useState('');
   const [locationId, setLocationId] = useState('');
   const [status, setStatus] = useState<'' | AssetStatus>('');
@@ -302,6 +304,7 @@ function AssetList() {
   const [scanValue, setScanValue] = useState('');
   const [addAssetOpen, setAddAssetOpen] = useState(false);
   const [addLocationOpen, setAddLocationOpen] = useState(false);
+  const [cameraScanOpen, setCameraScanOpen] = useState(false);
 
   const locationsQuery = useLocations();
   const assetsQuery = useAssets({
@@ -323,10 +326,25 @@ function AssetList() {
     }
   };
 
+  // Camera decode reuses the exact same resolveAssetQr(token) call as the
+  // manual-paste field above and the phone-camera-app #scan= deep link in
+  // ScreenRouter — one resolution path regardless of how the token arrived,
+  // so a QR sticker means the same thing everywhere it's read.
+  const openByCameraToken = async (token: string) => {
+    setCameraScanOpen(false);
+    try {
+      const asset = await resolveAssetQr(token);
+      openAsset(asset.id);
+    } catch {
+      toast({ title: 'Could not resolve that QR code', body: 'It may not be a valid asset sticker for this system.', tone: 'error' });
+    }
+  };
+
   return (
     <div className="screen-enter mx-auto max-w-[1400px] space-y-5 p-4 sm:p-6 lg:p-8">
       <AddAssetModal open={addAssetOpen} onClose={() => setAddAssetOpen(false)} />
       <AddLocationModal open={addLocationOpen} onClose={() => setAddLocationOpen(false)} />
+      {cameraScanOpen && <QrScannerView onDecode={openByCameraToken} onClose={() => setCameraScanOpen(false)} />}
 
       <SectionTitle
         eyebrow="Management"
@@ -380,6 +398,9 @@ function AssetList() {
                 />
               </div>
               <Button variant="secondary" onClick={openByToken} disabled={!scanValue.trim()}>Open</Button>
+              <Button variant="ghost" icon={<Camera className="h-4 w-4" />} onClick={() => setCameraScanOpen(true)}>
+                Scan with camera
+              </Button>
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" icon={<MapPin className="h-4 w-4" />} onClick={() => setAddLocationOpen(true)}>

@@ -6,6 +6,7 @@ import { cn, ageFromDOB, initialsOf } from '@/lib/utils';
 import { Card, CardHeader, Badge, Button, SectionTitle, Input, Select, Field, InfoNote, Avatar } from '@/components/ui/primitives';
 import { useCreateCouple, useUploadPatientDocument, useMandatoryDocumentStatus, uploadPatientDocument } from '@/lib/api/patients';
 import { PhotoCapture } from '@/components/ui/PhotoCapture';
+import { SignatureCapture } from '@/components/ui/SignatureCapture';
 import { ApiError } from '@/lib/api/client';
 import type { CoupleOut } from '@/lib/api/types';
 import { Check, ChevronLeft, ChevronRight, UserPlus, Users, Heart, FileCheck, Link2, ShieldCheck, Sparkles, AlertTriangle, Upload } from 'lucide-react';
@@ -91,6 +92,9 @@ export function Registration() {
   const [photoWarning, setPhotoWarning] = useState<string | null>(null);
   const [patientPhoto, setPatientPhoto] = useState<File | null>(null);
   const [partnerPhoto, setPartnerPhoto] = useState<File | null>(null);
+  const [patientSignature, setPatientSignature] = useState<File | null>(null);
+  const [partnerSignature, setPartnerSignature] = useState<File | null>(null);
+  const [signatureWarning, setSignatureWarning] = useState<string | null>(null);
   const createCouple = useCreateCouple();
 
   const [form, setForm] = useState({
@@ -179,6 +183,31 @@ export function Registration() {
               : null,
           );
 
+          // Same deferred-upload shape as the photos above: signatures are
+          // drawn against local File state during the wizard (there is no
+          // patient_id to upload against yet) and only actually persisted
+          // once the couple record exists.
+          const sigFailed: string[] = [];
+          if (patientSignature) {
+            try {
+              await uploadPatientDocument(couple.female_patient.id, 'consent_signature', patientSignature);
+            } catch {
+              sigFailed.push('patient');
+            }
+          }
+          if (partnerSignature) {
+            try {
+              await uploadPatientDocument(couple.male_patient.id, 'consent_signature', partnerSignature);
+            } catch {
+              sigFailed.push('partner');
+            }
+          }
+          setSignatureWarning(
+            sigFailed.length
+              ? `The couple was created, but the ${sigFailed.join(' and ')} signature${sigFailed.length > 1 ? 's' : ''} could not be saved. Capture ${sigFailed.length > 1 ? 'them' : 'it'} again from the patient profile.`
+              : null,
+          );
+
           setDone(true);
           toast({
             title: 'Couple created successfully',
@@ -236,10 +265,10 @@ export function Registration() {
           </div>
         </Card>
 
-        {photoWarning && (
+        {(photoWarning || signatureWarning) && (
           <div className="mt-5 flex w-full items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <p className="text-[13.5px] leading-relaxed text-amber-800">{photoWarning}</p>
+            <p className="text-[13.5px] leading-relaxed text-amber-800">{[photoWarning, signatureWarning].filter(Boolean).join(' ')}</p>
           </div>
         )}
 
@@ -254,7 +283,7 @@ export function Registration() {
         )}
 
         <div className="mt-6 flex gap-3">
-          <Button onClick={() => { setDone(false); setCreatedCouple(null); setStep(0); setPatientPhoto(null); setPartnerPhoto(null); setPhotoWarning(null); }}>Register another couple</Button>
+          <Button onClick={() => { setDone(false); setCreatedCouple(null); setStep(0); setPatientPhoto(null); setPartnerPhoto(null); setPhotoWarning(null); setPatientSignature(null); setPartnerSignature(null); setSignatureWarning(null); }}>Register another couple</Button>
           <Button
             variant="primary"
             iconRight={<ChevronRight className="h-4 w-4" />}
@@ -459,7 +488,6 @@ export function Registration() {
                 { l: 'Government photo identification', s: 'Aadhaar / Passport for both partners', done: true },
                 { l: 'Marriage certificate', s: 'Required for treatment consent', done: true },
                 { l: 'Previous treatment records', s: 'IUI cycle summaries from previous centre', done: true },
-                { l: 'General treatment consent', s: 'Digital signature captured from both partners', done: true },
                 { l: 'Data privacy acknowledgement', s: 'Patient information handling consent', done: false },
               ].map((d, i) => (
                 <div
@@ -487,6 +515,40 @@ export function Registration() {
                   </Badge>
                 </div>
               ))}
+
+              <div className="animate-fade-up rounded-xl border border-ink-200/70 bg-white p-3.5" style={{ animationDelay: '280ms' }}>
+                <div className="mb-3 flex items-center gap-3">
+                  <div
+                    className={cn(
+                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
+                      patientSignature && partnerSignature ? 'bg-brand-600' : 'border-2 border-dashed border-ink-300'
+                    )}
+                  >
+                    {patientSignature && partnerSignature && <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-medium text-ink-900">General treatment consent</p>
+                    <p className="text-[12.5px] text-ink-500">Signed on this device — finger, stylus or Apple Pencil</p>
+                  </div>
+                  <Badge tone={patientSignature && partnerSignature ? 'completed' : 'pending'} size="sm">
+                    {patientSignature && partnerSignature ? 'Received' : 'Pending'}
+                  </Badge>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SignatureCapture
+                    idPrefix="patient-consent"
+                    label={`${form.name || 'Patient'} — signature`}
+                    value={patientSignature}
+                    onChange={setPatientSignature}
+                  />
+                  <SignatureCapture
+                    idPrefix="partner-consent"
+                    label={`${form.pName || 'Partner'} — signature`}
+                    value={partnerSignature}
+                    onChange={setPartnerSignature}
+                  />
+                </div>
+              </div>
             </div>
           )}
 

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { fetchCurrentUser, loginRequest, logoutRequest, trySilentLogin } from './api/auth';
+import { loginWithPasskeyRequest } from './api/passkeys';
 import { setOnAuthExpired } from './api/client';
 import type { UserSummary } from './api/types';
 
@@ -10,6 +11,10 @@ interface AuthState {
   /** True until the initial silent-refresh attempt (on page load) resolves. */
   initializing: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** Additive alternative to `login` — Face ID/Touch ID via a registered
+   *  passkey. Never a replacement: see backend/app/webauthn/models.py for
+   *  why password stays the login every account can always fall back to. */
+  loginWithPasskey: () => Promise<void>;
   logout: () => Promise<void>;
   /** Re-fetches /auth/me — used after actions that can change the user's
    * own record (e.g. a future profile edit). */
@@ -49,6 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(loggedInUser);
   }, []);
 
+  const loginWithPasskey = useCallback(async () => {
+    const loggedInUser = await loginWithPasskeyRequest();
+    setUser(loggedInUser);
+  }, []);
+
   const logout = useCallback(async () => {
     await logoutRequest().catch(() => {
       // Best-effort — the local session is cleared either way so the UI
@@ -62,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ user, initializing, login, logout, refreshUser }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ user, initializing, login, loginWithPasskey, logout, refreshUser }}>{children}</Ctx.Provider>
   );
 }
 

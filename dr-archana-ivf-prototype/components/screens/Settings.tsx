@@ -1,11 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '@/lib/store';
 import { usePreferences, preferenceClasses } from '@/lib/preferences';
 import type { TextScale, Density, SidebarSections } from '@/lib/preferences';
 import { navForRole, SCREEN_TITLES } from '@/components/layout/nav';
 import { cn } from '@/lib/utils';
+import { isPasskeySupported } from '@/lib/webauthn';
+import { usePasskeys, useRegisterPasskey, useDeletePasskey } from '@/lib/api/passkeys';
+import { ApiError } from '@/lib/api/client';
 import {
   Card,
   CardHeader,
@@ -17,6 +20,8 @@ import {
   SegmentedControl,
   SettingRow,
   InfoNote,
+  Input,
+  Modal,
 } from '@/components/ui/primitives';
 import {
   Type,
@@ -29,7 +34,127 @@ import {
   RotateCcw,
   Eye,
   Monitor,
+  ScanFace,
+  Plus,
+  Trash2,
 } from 'lucide-react';
+
+/** Registered passkeys for the signed-in account — self-service register
+ *  and revoke, same "no extra permission code" reasoning as the backend
+ *  (backend/app/webauthn/router.py): this only ever touches your own
+ *  credentials, never anyone else's. */
+function AddPasskeyModal({ onClose }: { onClose: () => void }) {
+  const { toast } = useApp();
+  const register = useRegisterPasskey();
+  const [label, setLabel] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    setError(null);
+    register.mutate(label.trim() || null, {
+      onSuccess: () => {
+        toast({ title: 'Passkey added', body: 'You can now sign in here with Face ID or Touch ID.', tone: 'success' });
+        onClose();
+      },
+      onError: (e) => {
+        setError(
+          e instanceof DOMException && e.name === 'NotAllowedError'
+            ? 'Cancelled.'
+            : e instanceof ApiError
+            ? e.message
+            : 'Could not add this passkey.'
+        );
+      },
+    });
+  };
+
+  return (
+    <Modal
+      open onClose={onClose} title="Add a Passkey"
+      subtitle="Your device will prompt for Face ID or Touch ID to finish setting this up."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={register.isPending} onClick={submit}>Continue</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Input
+          label="Name this device (optional)"
+          placeholder="e.g. My iPad, Front Desk iPad"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+        />
+        {error && <p className="text-[13px] text-rose-600">{error}</p>}
+      </div>
+    </Modal>
+  );
+}
+
+function PasskeysCard() {
+  const { toast } = useApp();
+  const supported = isPasskeySupported();
+  const passkeysQuery = usePasskeys();
+  const remove = useDeletePasskey();
+  const [addOpen, setAddOpen] = useState(false);
+
+  return (
+    <Card className="overflow-hidden">
+      {addOpen && <AddPasskeyModal onClose={() => setAddOpen(false)} />}
+      <CardHeader
+        icon={<ScanFace className="h-4 w-4" />}
+        title="Passkeys"
+        subtitle="Sign in with Face ID or Touch ID instead of typing your password"
+        action={
+          supported && (
+            <Button size="sm" variant="secondary" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setAddOpen(true)}>
+              Add a passkey
+            </Button>
+          )
+        }
+      />
+      <div className="px-5 pb-5">
+        {!supported ? (
+          <InfoNote tone="neutral">This browser or device doesn't support passkeys — sign in with your password here instead.</InfoNote>
+        ) : passkeysQuery.isLoading ? (
+          <p className="text-[13.5px] text-ink-500">Loading…</p>
+        ) : (passkeysQuery.data ?? []).length === 0 ? (
+          <InfoNote tone="neutral">
+            No passkeys yet. Add one on a device you use regularly — a shared front-desk iPad can't reliably
+            recognise more than one person's face, so this works best on your own device.
+          </InfoNote>
+        ) : (
+          <div className="space-y-2">
+            {(passkeysQuery.data ?? []).map((p) => (
+              <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-ink-100 p-3">
+                <div className="min-w-0">
+                  <p className="truncate text-[13.5px] font-medium text-ink-900">{p.device_label || 'Unnamed device'}</p>
+                  <p className="text-[12px] text-ink-500">
+                    Added {new Date(p.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {p.last_used_at && ` · Last used ${new Date(p.last_used_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    remove.mutate(p.id, {
+                      onSuccess: () => toast({ title: 'Passkey removed', tone: 'success' }),
+                      onError: () => toast({ title: 'Could not remove this passkey', tone: 'error' }),
+                    })
+                  }
+                  aria-label={`Remove passkey: ${p.device_label || 'Unnamed device'}`}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-400 hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 /** A miniature of the real interface that re-renders under whatever the
  *  staff member has just selected, so the effect of a setting is visible
@@ -222,6 +347,9 @@ export function Settings() {
               }
             />
           </Card>
+
+          {/* ---------------- SIGN-IN & SECURITY ---------------- */}
+          <PasskeysCard />
 
           <InfoNote tone="brand" icon={<Monitor className="h-4 w-4" />}>
             These preferences are stored in this browser. Signing in on a different computer or

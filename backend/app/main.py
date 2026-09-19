@@ -142,9 +142,10 @@ from app.quality.router import router as quality_router
 from app.reports.router import router as reports_router
 from app.roles.router import router as roles_router
 from app.users.router import router as users_router
+from app.webauthn.router import router as webauthn_router
 
 for router in (
-    auth_router, users_router, roles_router,
+    auth_router, webauthn_router, users_router, roles_router,
     patients_router, patient_documents_router, appointments_router, reminders_router, communications_router,
     clinical_router, ivf_router, laboratory_router, embryology_router, cryostorage_router, ot_router,
     pharmacy_router, pharmacy_templates_router, pharmacy_purchase_returns_router,

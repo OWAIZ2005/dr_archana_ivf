@@ -115,7 +115,17 @@ export function Sidebar({
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex h-full w-[280px] shrink-0 flex-col border-r border-ink-200/70 bg-gradient-to-b from-white to-ink-50/50 transition-transform duration-300 ease-spring',
+          // w-[min(280px,85vw)], not a flat 280px: on iPad Split View /
+          // Slide Over the app can run in a pane as narrow as ~320-378px,
+          // where a fixed 280px overlay is nearly edge-to-edge. Capping it
+          // to 85% of the pane keeps the backdrop (and the fact this is a
+          // dismissable overlay, not the whole app) visible at any width.
+          'fixed inset-y-0 left-0 z-50 flex h-full w-[min(280px,85vw)] shrink-0 flex-col border-r border-ink-200/70 bg-gradient-to-b from-white to-ink-50/50 transition-transform duration-300 ease-spring',
+          // Safe-area padding only applies in this fixed/overlay mode — at
+          // lg:relative the aside becomes a normal flex child inside
+          // AppShell's already safe-area-padded root, so adding it again
+          // here would double it.
+          'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:pt-0 lg:pb-0',
           'lg:relative lg:z-30 lg:translate-x-0 lg:transition-[width]',
           collapsed ? 'lg:w-[76px]' : 'lg:w-[268px]',
           mobileOpen ? 'translate-x-0 shadow-pop' : '-translate-x-full'

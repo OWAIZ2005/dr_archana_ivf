@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/copy-qr-scanner-worker.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
@@ -19,6 +20,7 @@
     "lucide-react": "^0.294.0",
     "next": "^15.0.0",
     "postcss": "^8.4.0",
+    "qr-scanner": "^1.4.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.47.0",
