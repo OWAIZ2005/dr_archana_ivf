@@ -109,8 +109,17 @@ export function navGroupsForRole(role: Role, permissions?: string[]) {
 }
 
 export function canAccess(role: Role, screen: ScreenId, permissions?: string[]) {
-  // Patient workspace is reachable by any role that can see the patient list
-  if (screen === 'workspace') return ['doctor', 'receptionist', 'management'].includes(role);
+  // Patient workspace is reachable by any role that can see the patient
+  // list — derived from the 'patients' nav entry rather than its own
+  // hardcoded role array, so a role added there (pharmacist,
+  // prescription) automatically gets workspace access too instead of
+  // needing this list updated separately every time (the exact bug that
+  // left 'prescription' locked out after it was added to 'patients' but
+  // not here).
+  if (screen === 'workspace') {
+    const patientsItem = NAV.find((n) => n.id === 'patients');
+    return patientsItem ? hasAccess(patientsItem, role, permissions) : false;
+  }
   // Interface preferences are personal, not clinical — every role has them.
   if (screen === 'settings') return true;
   const item = NAV.find((n) => n.id === screen);

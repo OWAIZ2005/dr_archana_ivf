@@ -57,6 +57,15 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("clinical.read", "clinical", "View consultations and clinical notes", False),
     ("clinical.write", "clinical", "Create/edit clinical notes", False),
     ("clinical.correct", "clinical", "Issue a correction to a signed clinical record", True),
+    # Prescriptions — read access to a patient's written prescriptions,
+    # deliberately split out from clinical.read (which also covers full
+    # consultation notes) so the prescription department can view/fulfil
+    # what a doctor prescribed without also being handed clinical notes.
+    # Every clinical.read holder (doctor, nurse, chief_consultant) still
+    # sees prescriptions too — see require_any_permission() in
+    # app/prescription/router.py's GET routes. Writing a prescription
+    # stays clinical.write-only (doctor), unaffected by this permission.
+    ("prescriptions.read", "prescriptions", "View a patient's written prescriptions", False),
     # Nursing — minimal vitals/observations scaffold (full workflow unconfirmed)
     ("nursing.read", "nursing", "View nursing records / recorded vitals", False),
     ("nursing.create", "nursing", "Record nursing vitals and observations", False),
@@ -210,6 +219,10 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "appointments.manage_future", "appointments.reschedule", "appointments.cancel",
         "reminders.manage", "communications.create",
         "pharmacy.read",
+        # Views what a doctor prescribed so a visit can actually be
+        # fulfilled/dispensed before appointments.complete closes it out
+        # — not full clinical.read, which would also expose consultation notes.
+        "prescriptions.read",
     ]),
     "embryologist": ("Embryologist", [
         "patients.read",
@@ -302,20 +315,28 @@ async def seed_roles_and_permissions(session: AsyncSession) -> None:
 
     for role_code, (name, perm_codes) in ROLE_DEFAULTS.items():
         if role_code in existing_roles:
-            # Every system role (defined here in code, not created by a
-            # hospital admin) is re-synced to exactly match ROLE_DEFAULTS on
-            # every run — not just the "*" wildcard role. Without this, a
-            # permission added to an existing role's list here (e.g.
-            # donor.read added to "embryologist" after that role was first
-            # seeded) would silently never reach an already-seeded database,
-            # which is exactly the bug that shipped ivf.protocol.* and
-            # donor.* without embryologist/doctor actually getting them. A
-            # hospital that wants to customize permissions for a role
-            # should create a NEW role rather than editing a system one —
-            # this resync would otherwise undo that edit on the next deploy.
+            # Every system role is re-synced on every run, but ADDITIVELY —
+            # union(current DB permissions, this file's defaults), never a
+            # replace. This still guarantees a permission added here later
+            # (e.g. donor.read added to "embryologist" after that role was
+            # first seeded) reaches an already-seeded database, which is
+            # the reason this resync exists at all (it's what shipped
+            # ivf.protocol.* and donor.* without a re-seed otherwise
+            # reaching them). But it no longer undoes a hospital admin's
+            # own edits made via Administration -> Roles & Permissions
+            # (backend PUT /roles/{id}/permissions): a permission an admin
+            # granted beyond the code defaults survives every future
+            # resync. Revoking a *default* permission for a system role
+            # is still not durable across a resync — that's what a custom
+            # (non-system) role is for.
             result = await session.execute(select(Role).where(Role.code == role_code))
             role = result.scalar_one()
-            role.permissions = list(all_perms.values()) if perm_codes == ["*"] else [all_perms[c] for c in perm_codes if c in all_perms]
+            if perm_codes == ["*"]:
+                role.permissions = list(all_perms.values())
+            else:
+                current_codes = {p.code for p in role.permissions}
+                target_codes = current_codes | {c for c in perm_codes if c in all_perms}
+                role.permissions = [all_perms[c] for c in target_codes]
             session.add(role)
             continue
         role = Role(code=role_code, name=name, is_system_role=True)
