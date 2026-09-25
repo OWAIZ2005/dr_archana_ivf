@@ -4,7 +4,7 @@
 // re-pointed at live endpoints without refactoring.
 // ============================================================
 
-export type Role = 'doctor' | 'receptionist' | 'embryologist' | 'management' | 'pharmacist';
+export type Role = 'doctor' | 'receptionist' | 'embryologist' | 'management' | 'pharmacist' | 'prescription';
 
 export type StatusTone =
   | 'active'
@@ -77,6 +77,16 @@ export const USERS: Record<Role, StaffUser> = {
     email: 'ganesh@drarchanaivf.in',
     department: 'Pharmacy',
     accent: 'from-rose-500 to-pink-600',
+  },
+  prescription: {
+    id: 'DAIVF-STAFF-016',
+    role: 'prescription',
+    name: 'Kavitha Suresh',
+    title: 'Prescription Department',
+    initials: 'KS',
+    email: 'kavitha@drarchanaivf.in',
+    department: 'Prescription Department',
+    accent: 'from-indigo-500 to-blue-700',
   },
 };
 
@@ -854,6 +864,11 @@ export const ROLE_MATRIX: Record<Role, { allowed: string[]; restricted: string[]
     summary: 'Pharmacy operations — medicine catalogue, vendors, purchases, stock and dispensing.',
     allowed: ['Medicine Catalogue', 'Vendor Management', 'Purchase Entry & GRN', 'Stock & Batch Tracking', 'Stock Adjustment', 'Dispensing & Sales Returns'],
     restricted: ['Clinical Notes', 'Treatment Plans', 'Financial Reports', 'Staff Administration'],
+  },
+  prescription: {
+    summary: 'Ahead-of-visit-day appointment follow-up — future appointments, reminders, and closing out same-day visits.',
+    allowed: ['Future Appointments', 'Patient Reminders', 'Contact Attempt Logging', 'Mark Visit Completed'],
+    restricted: ['Booking New Appointments', 'Clinical Notes', 'Billing', 'Management Reports'],
   },
 };
 

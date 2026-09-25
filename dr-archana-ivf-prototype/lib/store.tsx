@@ -125,7 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (authUser && !prevAuthed.current) {
       const roleDefault: ScreenId =
-        role === 'management' ? 'reports' : role === 'embryologist' ? 'embryology' : role === 'receptionist' ? 'patients' : role === 'pharmacist' ? 'pharmacy' : 'dashboard';
+        role === 'management' ? 'reports' : role === 'embryologist' ? 'embryology' : role === 'receptionist' ? 'patients' : role === 'pharmacist' ? 'pharmacy' : role === 'prescription' ? 'appointments' : 'dashboard';
       // A staff member can pin their own landing screen in Settings →
       // User Interface. Fall back to the role default if that choice is
       // no longer one their role may open.

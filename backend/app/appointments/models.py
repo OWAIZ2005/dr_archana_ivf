@@ -41,7 +41,15 @@ class AppointmentStatus(str, enum.Enum):
 # this via a separate, audited code path (see workflow engine, Phase 3).
 ALLOWED_TRANSITIONS: dict[AppointmentStatus, set[AppointmentStatus]] = {
     AppointmentStatus.REGISTERED: {AppointmentStatus.ARRIVED, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW},
-    AppointmentStatus.ARRIVED: {AppointmentStatus.WAITING, AppointmentStatus.CANCELLED},
+    # COMPLETED is reachable directly from ARRIVED, not only through the
+    # granular WAITING -> ... -> PHARMACY/FOLLOW_UP chain below: the
+    # front-desk and prescription-department workflow this actually
+    # supports today is "patient arrives, is seen, prescription is
+    # dispensed, done" — there is no UI yet driving the intermediate
+    # consultation/investigation/billing states, so requiring a visit to
+    # pass through all of them before it could ever be closed out would
+    # make every real appointment un-completable.
+    AppointmentStatus.ARRIVED: {AppointmentStatus.WAITING, AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED},
     AppointmentStatus.WAITING: {AppointmentStatus.CONSULTATION, AppointmentStatus.CANCELLED},
     AppointmentStatus.CONSULTATION: {AppointmentStatus.INVESTIGATION, AppointmentStatus.BILLING, AppointmentStatus.FOLLOW_UP},
     AppointmentStatus.INVESTIGATION: {AppointmentStatus.BILLING, AppointmentStatus.CONSULTATION},

@@ -19,7 +19,8 @@ from app.appointments.schemas import (
     BatchGroupOut,
 )
 from app.core.database import get_db
-from app.core.deps import require_permission
+from app.core.deps import get_current_user, require_permission
+from app.core.exceptions import PermissionDeniedError
 from app.users.models import User
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
@@ -94,10 +95,13 @@ async def future_appointments(
     status: AppointmentStatus | None = Query(default=None),
     q: str | None = Query(default=None, max_length=120),
     session: AsyncSession = Depends(get_db),
-    _: User = Depends(require_permission("appointments.read")),
+    _: User = Depends(require_permission("appointments.manage_future")),
 ) -> list[AppointmentOut]:
     """Future Appointment Details — server-side filtered, defaults to
-    "from today onward" excluding cancelled/no-show/completed visits."""
+    "from today onward" excluding cancelled/no-show/completed visits.
+    Gated on appointments.manage_future (not the blanket appointments.read
+    every role has) since this ahead-of-visit-day list is scoped to the
+    prescription department, not every role that can see today's book."""
     params = AppointmentListParams(from_date=from_date, to_date=to_date, doctor_id=doctor_id, status=status, q=q)
     return await service.list_future_appointments(session, params)
 
@@ -187,13 +191,31 @@ async def clear_not_arrived(
     return await service.clear_not_arrived(session, appointment_id, actor_id=current.id, actor_role=current.role.code)
 
 
+# Which permission a status transition needs, keyed by the TARGET status —
+# completing a visit and cancelling one are different capabilities (see
+# roles/seed.py: appointments.complete vs appointments.cancel), so this
+# can't be a single static require_permission(...) dependency the way
+# every other route here is. Anything not listed (there is currently no
+# UI path that reaches WAITING/CONSULTATION/etc. through this endpoint)
+# falls back to the blanket appointments.read every relevant role already has.
+_STATUS_PERMISSION: dict[AppointmentStatus, str] = {
+    AppointmentStatus.COMPLETED: "appointments.complete",
+    AppointmentStatus.CANCELLED: "appointments.cancel",
+    AppointmentStatus.NO_SHOW: "appointments.cancel",
+}
+
+
 @router.post("/{appointment_id}/status", response_model=AppointmentOut)
 async def update_status(
     appointment_id: str,
     body: AppointmentStatusUpdate,
     session: AsyncSession = Depends(get_db),
-    current: User = Depends(require_permission("appointments.read")),
+    current: User = Depends(get_current_user),
 ) -> AppointmentOut:
+    required = _STATUS_PERMISSION.get(body.status, "appointments.read")
+    codes = {p.code for p in current.role.permissions}
+    if required not in codes:
+        raise PermissionDeniedError(f"Missing required permission: {required}", error_code="permission_denied")
     return await service.transition_status(
         session, appointment_id, body.status, actor_id=current.id, actor_role=current.role.code, reason=body.reason
     )

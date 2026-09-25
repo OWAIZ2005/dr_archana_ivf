@@ -36,8 +36,22 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("appointments.cancel", "appointments", "Cancel an appointment", False),
     ("appointments.reschedule", "appointments", "Reschedule an appointment", False),
     ("appointments.manage_batches", "appointments", "Configure appointment batches/time slots", True),
-    # Reminders / communications (front desk)
-    ("reminders.manage", "appointments", "Create/edit/complete front-desk reminders", False),
+    # Closing out a visit — separate from appointments.checkin (arriving)
+    # and appointments.cancel (not happening at all): this is "the visit
+    # happened and is done", the last step in the front-desk/prescription
+    # workflow. Both roles get it; see ALLOWED_TRANSITIONS in
+    # app/appointments/models.py for the ARRIVED -> COMPLETED rule this gates.
+    ("appointments.complete", "appointments", "Mark an appointment as completed", False),
+    # Reschedule/cancel/contact work on appointments ahead of the visit
+    # day (the "Future Appointments" list) — deliberately separate from
+    # plain appointments.read so this can be handed to the prescription
+    # department without also handing them the batch capacity config
+    # that appointments.manage_batches guards.
+    ("appointments.manage_future", "appointments", "View and manage the future-appointments list ahead of the visit day", False),
+    # Reminders / communications — owned by the prescription department,
+    # not front desk (moved there; front desk still gets
+    # communications.create for same-day contact attempts).
+    ("reminders.manage", "appointments", "Create/edit/complete patient follow-up reminders", False),
     ("communications.create", "appointments", "Log a patient contact attempt (call/email)", False),
     # Clinical
     ("clinical.read", "clinical", "View consultations and clinical notes", False),
@@ -165,12 +179,29 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
     ]),
     "receptionist": ("Receptionist", [
         "patients.read", "patients.create", "patients.sensitive_documents",
-        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel", "appointments.reschedule",
-        "reminders.manage", "communications.create",
+        # Same-day operations only — booking, arrival, cancelling today's
+        # visit, closing it out. reminders.manage and appointments.manage_future
+        # deliberately excluded: that ahead-of-visit-day follow-up work
+        # belongs to the prescription department now, not front desk.
+        "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
+        "appointments.reschedule", "appointments.complete",
+        "communications.create",
         "billing.read", "billing.create", "billing.payment",
         "pharmacy.read",
         "messaging.send",
         "assets.read",
+    ]),
+    "prescription": ("Prescription Department", [
+        "patients.read",
+        # Owns the ahead-of-visit-day workload: future appointments and
+        # reminder follow-ups, moved off front desk. Also gets
+        # appointments.complete — the same "visit is done" action front
+        # desk has — since prescription is the actual last step of a
+        # real visit (dispensing) before it can be closed out.
+        "appointments.read", "appointments.checkin", "appointments.complete",
+        "appointments.manage_future", "appointments.reschedule", "appointments.cancel",
+        "reminders.manage", "communications.create",
+        "pharmacy.read",
     ]),
     "embryologist": ("Embryologist", [
         "patients.read",

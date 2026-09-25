@@ -651,12 +651,18 @@ function BatchAppointmentRow({
   onContact: () => void;
   onEdit: () => void;
 }) {
-  const { toast } = useApp();
+  const { toast, can } = useApp();
   const checkIn = useCheckInAppointment();
   const markNotArrived = useMarkNotArrived();
+  const updateStatus = useUpdateAppointmentStatus();
   const now = useNowTicker();
   const display = arrivalDisplay(appt, now);
   const canAct = appt.status === 'registered';
+  // Both Front Desk and the Prescription Department hold
+  // appointments.complete — prescription (dispensing) is the actual last
+  // step of a real visit, so it's not exclusive to whoever checked the
+  // patient in. Only offered once the patient has actually arrived.
+  const canComplete = appt.status === 'arrived' && can('appointments.complete');
   const isNotArrivedFlagged = !!appt.marked_not_arrived_at;
   const needsContact = isNotArrivedFlagged || display.label === 'Late / Awaiting Arrival' || appt.status === 'no_show';
 
@@ -698,6 +704,20 @@ function BatchAppointmentRow({
               <Button size="sm" variant="ghost" onClick={onReschedule}>Reschedule</Button>
               <Button size="sm" variant="ghost" onClick={onEdit}>Edit</Button>
             </>
+          )}
+          {canComplete && (
+            <Button
+              size="sm" variant="primary"
+              onClick={() =>
+                updateStatus.mutate(
+                  { appointmentId: appt.id, status: 'completed' },
+                  { onError: (e) => toast({ title: 'Could not mark completed', body: e instanceof ApiError ? e.message : undefined, tone: 'error' }) }
+                )
+              }
+              loading={updateStatus.isPending}
+            >
+              Mark Completed
+            </Button>
           )}
         </div>
       </div>
@@ -1260,13 +1280,38 @@ function RemindersTab() {
 const STATUS_FILTERS = ['All', 'registered', 'arrived', 'waiting', 'consultation', 'investigation', 'billing', 'pharmacy', 'follow_up', 'completed', 'cancelled', 'no_show'];
 
 export function Appointments() {
-  const { openPatient } = useApp();
+  const { openPatient, can } = useApp();
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('All');
   const [doctorFilter, setDoctorFilter] = useState<string | null>(null);
   const [bookingOpen, setBookingOpen] = useState(false);
   const [view, setView] = useState<'batches' | 'list' | 'future' | 'closed' | 'phone' | 'reminders'>('batches');
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // Future Appointments and Reminders are the prescription department's
+  // ahead-of-visit-day workload now, not front desk's — hidden here (and
+  // enforced again on the backend via appointments.manage_future /
+  // reminders.manage) rather than just left reachable in the UI for a
+  // role that no longer has the permission to act on them.
+  const canManageFuture = can('appointments.manage_future');
+  const canManageReminders = can('reminders.manage');
+  const availableTabs = [
+    { id: 'batches' as const, label: "Today's Batches" },
+    { id: 'list' as const, label: 'Full List' },
+    canManageFuture && { id: 'future' as const, label: 'Future Appointments' },
+    canManageReminders && { id: 'reminders' as const, label: 'Reminders' },
+    { id: 'phone' as const, label: 'Phone Call Appointments' },
+    { id: 'closed' as const, label: 'Closed Appointments' },
+  ].filter((t): t is { id: typeof view; label: string } => !!t);
+
+  // A role that lost access to whichever tab was last selected (or a
+  // stale value from before a permission change) falls back to the one
+  // tab everyone with this screen can always see, rather than rendering
+  // a tab body for a view no longer in the list above.
+  useEffect(() => {
+    if (!availableTabs.some((t) => t.id === view)) setView('batches');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canManageFuture, canManageReminders]);
 
   const appointmentsQuery = useAppointments();
   const patientsQuery = usePatients();
@@ -1334,14 +1379,7 @@ export function Appointments() {
       </div>
 
       <Tabs
-        tabs={[
-          { id: 'batches', label: "Today's Batches" },
-          { id: 'list', label: 'Full List' },
-          { id: 'future', label: 'Future Appointments' },
-          { id: 'reminders', label: 'Reminders' },
-          { id: 'phone', label: 'Phone Call Appointments' },
-          { id: 'closed', label: 'Closed Appointments' },
-        ]}
+        tabs={availableTabs}
         active={view}
         onChange={(id) => setView(id as typeof view)}
       />

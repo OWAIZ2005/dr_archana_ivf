@@ -39,9 +39,9 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   // ---------------- CLINICAL ----------------
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Clinical', roles: ['doctor', 'management'] },
-  { id: 'patients', label: 'Patients', icon: Users, section: 'Clinical', roles: ['doctor', 'receptionist', 'management', 'pharmacist'] },
+  { id: 'patients', label: 'Patients', icon: Users, section: 'Clinical', roles: ['doctor', 'receptionist', 'management', 'pharmacist', 'prescription'] },
   { id: 'registration', label: 'Register Couple', icon: UserPlus, section: 'Clinical', roles: ['doctor', 'receptionist'] },
-  { id: 'appointments', label: 'Appointments', icon: CalendarClock, section: 'Clinical', roles: ['doctor', 'receptionist', 'management'] },
+  { id: 'appointments', label: 'Appointments', icon: CalendarClock, section: 'Clinical', roles: ['doctor', 'receptionist', 'management', 'prescription'] },
   { id: 'timeline', label: 'Clinical Timeline', icon: GitBranch, section: 'Clinical', roles: ['doctor', 'embryologist'] },
   { id: 'monitoring', label: 'Stimulation & Monitoring', icon: Activity, section: 'Clinical', roles: ['doctor', 'embryologist'], badge: 2 },
   { id: 'plan', label: 'Treatment Plan', icon: ClipboardList, section: 'Clinical', roles: ['doctor'] },
@@ -64,7 +64,7 @@ export const NAV: NavItem[] = [
 
   // ---------------- MANAGEMENT ----------------
   { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, section: 'Management', roles: ['management', 'doctor'] },
-  { id: 'access', label: 'Role & Access', icon: ShieldCheck, section: 'Management', roles: ['doctor', 'receptionist', 'embryologist', 'management', 'pharmacist'] },
+  { id: 'access', label: 'Role & Access', icon: ShieldCheck, section: 'Management', roles: ['doctor', 'receptionist', 'embryologist', 'management', 'pharmacist', 'prescription'] },
   { id: 'audit', label: 'Audit Log', icon: ScrollText, section: 'Management', roles: ['doctor', 'management'] },
   { id: 'assets', label: 'Asset & Item Tracking', icon: QrCode, section: 'Management', roles: ['management'] },
   { id: 'administration', label: 'Administration', icon: Settings, section: 'Management', roles: ['management'] },

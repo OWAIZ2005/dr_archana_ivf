@@ -22,6 +22,7 @@ import {
   ScanFace,
   AlertTriangle,
   Pill,
+  ClipboardList,
 } from 'lucide-react';
 
 const AUTH_STEPS = [
@@ -39,6 +40,7 @@ const ROLE_CARDS: { role: Role; label: string; desc: string; icon: any; email: s
   { role: 'embryologist', label: 'Embryology Lab', desc: 'Oocytes, embryos & cryostorage', icon: Microscope, email: 'meera@drarchanaivf.in' },
   { role: 'management', label: 'Management', desc: 'Operations, revenue & analytics', icon: Sparkles, email: 'rajesh@drarchanaivf.in' },
   { role: 'pharmacist', label: 'Pharmacy', desc: 'Medicines, vendors, purchases & stock', icon: Pill, email: 'ganesh@drarchanaivf.in' },
+  { role: 'prescription', label: 'Prescription Dept.', desc: 'Future appointments, reminders & visit closure', icon: ClipboardList, email: 'kavitha@drarchanaivf.in' },
 ];
 
 const DEMO_PASSWORD = 'ChangeMe123!';
