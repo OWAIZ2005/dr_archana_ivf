@@ -77,13 +77,29 @@ export const SECTIONS = ['Clinical', 'Laboratory', 'Operations', 'Management'];
  *  used every single session are never more than one glance away. */
 export const PINNED_IDS: ScreenId[] = ['dashboard', 'patients', 'appointments'];
 
-export function navForRole(role: Role) {
-  return NAV.filter((n) => n.roles.includes(role));
+/** Screens whose visibility an admin can grant/revoke per role from the
+ * RBAC screen (Administration → Roles & Permissions), via a real backend
+ * permission code, instead of the hardcoded `roles` list below. Checked
+ * only when the caller has a `permissions` array (i.e. is signed in) —
+ * falls back to the hardcoded list otherwise so this stays backwards
+ * compatible with call sites that haven't been updated. */
+const SCREEN_PERMISSION: Partial<Record<ScreenId, string>> = {
+  dashboard: 'dashboard.view',
+};
+
+function hasAccess(item: NavItem, role: Role, permissions?: string[]) {
+  const code = SCREEN_PERMISSION[item.id];
+  if (code && permissions) return permissions.includes(code);
+  return item.roles.includes(role);
+}
+
+export function navForRole(role: Role, permissions?: string[]) {
+  return NAV.filter((n) => hasAccess(n, role, permissions));
 }
 
 /** Menu split into the pinned cluster and the remaining sectioned items. */
-export function navGroupsForRole(role: Role) {
-  const items = navForRole(role);
+export function navGroupsForRole(role: Role, permissions?: string[]) {
+  const items = navForRole(role, permissions);
   return {
     pinned: PINNED_IDS.map((id) => items.find((i) => i.id === id)).filter(
       (i): i is NavItem => !!i
@@ -92,13 +108,13 @@ export function navGroupsForRole(role: Role) {
   };
 }
 
-export function canAccess(role: Role, screen: ScreenId) {
+export function canAccess(role: Role, screen: ScreenId, permissions?: string[]) {
   // Patient workspace is reachable by any role that can see the patient list
   if (screen === 'workspace') return ['doctor', 'receptionist', 'management'].includes(role);
   // Interface preferences are personal, not clinical — every role has them.
   if (screen === 'settings') return true;
   const item = NAV.find((n) => n.id === screen);
-  return item ? item.roles.includes(role) : false;
+  return item ? hasAccess(item, role, permissions) : false;
 }
 
 export const SCREEN_TITLES: Record<ScreenId, string> = {

@@ -147,6 +147,13 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("admin.manage_users", "admin", "Create/edit/deactivate user accounts", True),
     ("admin.manage_roles", "admin", "Edit role/permission assignments", True),
     ("admin.manage_settings", "admin", "Edit master settings (charges, packages, tests)", True),
+    # Dashboard — the one screen-level (not action-level) permission in
+    # this taxonomy. It exists so an admin can grant/revoke a role's
+    # access to the Clinical Dashboard from the RBAC screen without a
+    # code change; see components/layout/nav.ts's canAccess() on the
+    # frontend, which checks this permission for the 'dashboard' screen
+    # instead of its hardcoded role list.
+    ("dashboard.view", "admin", "View the Clinical Dashboard", False),
 ]
 
 # ---------------------------------------------------------------------------
@@ -167,6 +174,7 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "pharmacy.read", "pharmacy.indent_request",
         "billing.read", "billing.override", "donor.read",
         "reports.read", "reports.generate", "audit.read",
+        "dashboard.view",
     ]),
     "nurse": ("Nurse", [
         "patients.read", "appointments.read", "appointments.checkin",
@@ -242,6 +250,7 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "audit.read",
         "maintenance.read", "quality.read",
         "assets.read", "assets.register", "assets.move",
+        "dashboard.view",
     ]),
     "chief_consultant": ("Chief Consultant", [
         # Everything a doctor has, plus the restricted treatment protocol.

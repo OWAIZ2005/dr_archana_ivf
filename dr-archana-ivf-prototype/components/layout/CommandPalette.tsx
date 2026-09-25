@@ -19,7 +19,7 @@ interface Result {
 }
 
 export function CommandPalette() {
-  const { paletteOpen, setPaletteOpen, go, role, toast } = useApp();
+  const { paletteOpen, setPaletteOpen, go, role, toast, permissions } = useApp();
   const [q, setQ] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +34,7 @@ export function CommandPalette() {
 
   const results = useMemo<Result[]>(() => {
     if (!role) return [];
-    const nav = navForRole(role).map((n) => ({
+    const nav = navForRole(role, permissions).map((n) => ({
       id: `nav-${n.id}`,
       label: n.label,
       hint: n.section,
@@ -81,7 +81,7 @@ export function CommandPalette() {
     return all
       .filter((r) => r.label.toLowerCase().includes(term) || r.hint.toLowerCase().includes(term))
       .slice(0, 12);
-  }, [q, role, go, toast]);
+  }, [q, role, go, toast, permissions]);
 
   useEffect(() => setCursor(0), [q]);
 

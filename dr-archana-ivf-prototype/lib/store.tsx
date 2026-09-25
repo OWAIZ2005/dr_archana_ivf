@@ -131,7 +131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // no longer one their role may open.
       const chosen = startScreenRef.current;
       const landing =
-        chosen !== 'role-default' && role && canAccess(role, chosen as ScreenId)
+        chosen !== 'role-default' && role && canAccess(role, chosen as ScreenId, permissions)
           ? (chosen as ScreenId)
           : roleDefault;
       setScreen(landing);

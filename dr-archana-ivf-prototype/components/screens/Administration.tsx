@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { SYSTEM_SETTINGS_GROUPS, PROCEDURE_CHARGES, TREATMENT_PACKAGES, USERS } from '@/lib/data';
 import { cn, formatINR } from '@/lib/utils';
-import { Card, CardHeader, Badge, Button, SectionTitle, Tabs, InfoNote, ActionRow } from '@/components/ui/primitives';
+import { Card, CardHeader, Badge, Button, SectionTitle, Tabs, InfoNote, ActionRow, Switch } from '@/components/ui/primitives';
 import { useProcedureCharges, usePackages } from '@/lib/api/administration';
+import { useRoles, usePermissionCatalogue, useUpdateRolePermissions } from '@/lib/api/roles';
+import { ApiError } from '@/lib/api/client';
 import {
   Users,
   ClipboardList,
@@ -16,6 +18,7 @@ import {
   ChevronRight,
   Package,
   Pencil,
+  Lock,
 } from 'lucide-react';
 
 const ICONS: Record<string, any> = {
@@ -26,6 +29,170 @@ const ICONS: Record<string, any> = {
   shield: ShieldCheck,
   settings: SettingsIcon,
 };
+
+function RolesPermissionsPanel() {
+  const { toast, can } = useApp();
+  const rolesQuery = useRoles();
+  const catalogueQuery = usePermissionCatalogue();
+  const updatePermissions = useUpdateRolePermissions();
+  const roles = rolesQuery.data ?? [];
+  const catalogue = catalogueQuery.data ?? [];
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [pendingCodes, setPendingCodes] = useState<Set<string> | null>(null);
+
+  const selectedRole = roles.find((r) => r.id === selectedRoleId) ?? roles[0] ?? null;
+
+  // Reset the working set of checked permissions whenever the selected
+  // role changes (or its data arrives) — editing is against a local
+  // draft so a mis-click doesn't PUT until "Save changes" is pressed.
+  useEffect(() => {
+    if (selectedRole) setPendingCodes(new Set(selectedRole.permissions.map((p) => p.code)));
+  }, [selectedRole?.id]);
+
+  if (!can('admin.manage_roles')) {
+    return (
+      <div className="p-5">
+        <InfoNote tone="amber" icon={<Lock className="h-4 w-4" />}>
+          Your account does not have the "Manage roles" permission, so this panel is read-only for you.
+        </InfoNote>
+      </div>
+    );
+  }
+
+  if (rolesQuery.isLoading || catalogueQuery.isLoading) {
+    return <p className="p-5 text-[13.5px] text-ink-500">Loading roles…</p>;
+  }
+
+  if (rolesQuery.isError || catalogueQuery.isError || roles.length === 0) {
+    return (
+      <div className="p-5">
+        <InfoNote tone="amber" icon={<Lock className="h-4 w-4" />}>
+          Could not load roles from the server. Try again in a moment.
+        </InfoNote>
+      </div>
+    );
+  }
+
+  const modules = Array.from(new Set(catalogue.map((p) => p.module))).sort();
+
+  const isAdministrator = selectedRole?.code === 'administrator';
+  const dirty =
+    !!selectedRole &&
+    !!pendingCodes &&
+    (pendingCodes.size !== selectedRole.permissions.length ||
+      selectedRole.permissions.some((p) => !pendingCodes.has(p.code)));
+
+  const togglePermission = (permissionId: string, code: string) => {
+    setPendingCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+    void permissionId; // kept for clarity at call sites; codes drive the Set
+  };
+
+  const handleSave = () => {
+    if (!selectedRole || !pendingCodes) return;
+    const permissionIds = catalogue.filter((p) => pendingCodes.has(p.code)).map((p) => p.id);
+    updatePermissions.mutate(
+      { roleId: selectedRole.id, permissionIds },
+      {
+        onSuccess: () => toast({ title: 'Permissions saved', body: `${selectedRole.name}'s access has been updated.`, tone: 'success' }),
+        onError: (e) =>
+          toast({
+            title: 'Could not save permissions',
+            body: e instanceof ApiError ? e.message : undefined,
+            tone: 'error',
+          }),
+      }
+    );
+  };
+
+  return (
+    <div className="animate-fade-up grid gap-4 p-5 lg:grid-cols-[240px_1fr]">
+      <div className="space-y-1.5">
+        {roles.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setSelectedRoleId(r.id)}
+            className={cn(
+              'flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-[13.5px] font-medium transition-colors',
+              (selectedRole?.id ?? roles[0]?.id) === r.id
+                ? 'bg-brand-50 text-brand-800 ring-1 ring-inset ring-brand-600/15'
+                : 'text-ink-600 hover:bg-ink-100'
+            )}
+          >
+            <span>{r.name}</span>
+            <Badge tone="neutral" size="sm">
+              {r.permissions.length}
+            </Badge>
+          </button>
+        ))}
+      </div>
+
+      {selectedRole && pendingCodes && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[15px] font-semibold text-ink-900">{selectedRole.name}</p>
+              <p className="text-[12.5px] text-ink-500">
+                {isAdministrator
+                  ? 'The Administrator role always has every permission and cannot be edited.'
+                  : `${pendingCodes.size} of ${catalogue.length} permissions granted`}
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              disabled={isAdministrator || !dirty}
+              loading={updatePermissions.isPending}
+              onClick={handleSave}
+            >
+              Save changes
+            </Button>
+          </div>
+
+          <div className="max-h-[520px] space-y-4 overflow-y-auto pr-1">
+            {modules.map((module) => {
+              const perms = catalogue.filter((p) => p.module === module);
+              return (
+                <div key={module}>
+                  <p className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-ink-400">{module}</p>
+                  <div className="space-y-1 rounded-xl border border-ink-200/70">
+                    {perms.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between gap-3 border-b border-ink-100 px-3.5 py-2.5 last:border-b-0"
+                      >
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-[13px] font-medium text-ink-800">
+                            {p.description ?? p.code}
+                            {p.is_critical && (
+                              <Badge tone="attention" size="sm" dot={false}>
+                                Critical
+                              </Badge>
+                            )}
+                          </p>
+                          <p className="tnum text-[11.5px] text-ink-400">{p.code}</p>
+                        </div>
+                        <Switch
+                          label={`Grant ${p.code} to ${selectedRole.name}`}
+                          checked={pendingCodes.has(p.code)}
+                          disabled={isAdministrator}
+                          onChange={() => togglePermission(p.id, p.code)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Administration() {
   const { toast } = useApp();
@@ -73,6 +240,7 @@ export function Administration() {
               { id: 'charges', label: 'Procedure Charges', count: charges.length },
               { id: 'packages', label: 'Treatment Packages', count: packages.length },
               { id: 'users', label: 'Users & Roles', count: Object.keys(USERS).length },
+              { id: 'rbac', label: 'Roles & Permissions' },
             ]}
             active={tab}
             onChange={setTab}
@@ -164,6 +332,8 @@ export function Administration() {
             ))}
           </div>
         )}
+
+        {tab === 'rbac' && <RolesPermissionsPanel />}
       </Card>
     </div>
   );

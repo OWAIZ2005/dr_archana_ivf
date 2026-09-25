@@ -67,13 +67,13 @@ function Restricted() {
 }
 
 function ScreenRouter() {
-  const { screen, role, scanMode } = useApp();
+  const { screen, role, scanMode, permissions } = useApp();
   if (!role) return null;
   // A QR scan can bring any signed-in user to the asset scan page regardless
   // of the sidebar's role map — the page and its APIs still enforce
   // `assets.read` / `assets.move` on the backend.
   const scanBypass = screen === 'assets' && scanMode;
-  if (!scanBypass && !canAccess(role, screen)) return <Restricted />;
+  if (!scanBypass && !canAccess(role, screen, permissions)) return <Restricted />;
 
   switch (screen) {
     case 'dashboard':

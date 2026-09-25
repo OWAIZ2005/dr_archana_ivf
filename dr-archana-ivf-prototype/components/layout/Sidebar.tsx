@@ -19,14 +19,14 @@ export function Sidebar({
   mobileOpen: boolean;
   onCloseMobile: () => void;
 }) {
-  const { role, user, screen, go, logout, setPaletteOpen } = useApp();
+  const { role, user, screen, go, logout, setPaletteOpen, permissions } = useApp();
   const { prefs } = usePreferences();
   const listRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState({ top: 0, height: 0, visible: false });
 
   const { pinned, sectioned } = useMemo(
-    () => (role ? navGroupsForRole(role) : { pinned: [], sectioned: [] }),
-    [role]
+    () => (role ? navGroupsForRole(role, permissions) : { pinned: [], sectioned: [] }),
+    [role, permissions]
   );
 
   // Which section the current screen lives in — used both to auto-open

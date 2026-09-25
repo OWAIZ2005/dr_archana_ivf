@@ -196,12 +196,12 @@ function LivePreview() {
 }
 
 export function Settings() {
-  const { role, toast } = useApp();
+  const { role, toast, permissions } = useApp();
   const { prefs, setPref, reset } = usePreferences();
 
   // Only offer landing screens this role can actually open — otherwise a
   // staff member could pin themselves to a permission-denied screen.
-  const startScreenOptions = role ? navForRole(role) : [];
+  const startScreenOptions = role ? navForRole(role, permissions) : [];
 
   return (
     <div className="screen-enter mx-auto max-w-[1000px] space-y-5 p-4 sm:p-6 lg:p-8">
