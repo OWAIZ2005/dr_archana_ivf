@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { Card, CardHeader, Badge, Button, SectionTitle, Avatar, InfoNote } from '@/components/ui/primitives';
 import { ShieldCheck, Check, X, Lock, Users2, Info } from 'lucide-react';
 
-const ROLES: Role[] = ['doctor', 'receptionist', 'embryologist', 'management'];
+const ROLES: Role[] = ['doctor', 'receptionist', 'embryologist', 'management', 'pharmacist', 'prescription'];
 
 export function Access() {
   const { role: currentRole, user: currentUser, toast } = useApp();
