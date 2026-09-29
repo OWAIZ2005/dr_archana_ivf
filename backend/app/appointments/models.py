@@ -144,6 +144,28 @@ class AppointmentHistory(Base, UUIDPrimaryKeyMixin):
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class AppointmentStatusEvent(Base, UUIDPrimaryKeyMixin):
+    """Append-only log of every status transition an appointment goes
+    through — written by transition_status() below. Unlike
+    AppointmentHistory (reschedules only), this exists so the HR
+    operations module (app/hr/process.py) can compute how long a patient
+    has actually spent in the current stage and detect delays against a
+    configured threshold. Read-only from HR's side: appointments owns
+    this table and is the only thing that writes to it, so the clinical
+    workflow has no dependency on the HR module existing."""
+    __tablename__ = "appointment_status_events"
+
+    appointment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("appointments.id"), nullable=False, index=True)
+    from_status: Mapped[AppointmentStatus] = mapped_column(Enum(AppointmentStatus), nullable=False)
+    to_status: Mapped[AppointmentStatus] = mapped_column(Enum(AppointmentStatus), nullable=False, index=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    changed_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    # Set later, via HR's PATCH endpoint, once a delayed stage is reviewed
+    # — spec §14: "the responsible department/user should enter or select
+    # the reason", not an automatic guess.
+    delay_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class ReminderStatus(str, enum.Enum):
     PENDING = "pending"
     COMPLETED = "completed"

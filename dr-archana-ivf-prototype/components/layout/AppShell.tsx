@@ -39,6 +39,7 @@ import { Donors } from '@/components/screens/Donors';
 import { Messaging } from '@/components/screens/Messaging';
 import { AssetTracking } from '@/components/screens/AssetTracking';
 import { Settings } from '@/components/screens/Settings';
+import { HR } from '@/components/screens/HR';
 
 import { Lock, ArrowLeft } from 'lucide-react';
 
@@ -128,6 +129,8 @@ function ScreenRouter() {
       return <AssetTracking />;
     case 'settings':
       return <Settings />;
+    case 'hr':
+      return <HR />;
     default:
       return <Dashboard />;
   }

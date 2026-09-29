@@ -1,14 +1,13 @@
 import uuid
-from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit_event
 from app.core.exceptions import ConflictError, NotFoundError
 from app.events.bus import EventType, emit
-from app.hr.models import Employee, LeaveRequest, LeaveStatus
-from app.hr.schemas import EmployeeCreate, LeaveRequestCreate
+from app.hr.models import Employee, EmploymentStatus, LeaveRequest, LeaveStatus
+from app.hr.schemas import EmployeeCreate, EmployeeUpdate, LeaveRequestCreate
 
 
 async def create_employee(session: AsyncSession, data: EmployeeCreate) -> Employee:
@@ -18,9 +17,53 @@ async def create_employee(session: AsyncSession, data: EmployeeCreate) -> Employ
     return employee
 
 
-async def list_employees(session: AsyncSession) -> list[Employee]:
-    result = await session.execute(select(Employee).order_by(Employee.full_name))
+async def list_employees(
+    session: AsyncSession, *, department: str | None = None, employment_status: EmploymentStatus | None = None, q: str | None = None,
+) -> list[Employee]:
+    stmt = select(Employee)
+    if department:
+        stmt = stmt.where(Employee.department == department)
+    if employment_status:
+        stmt = stmt.where(Employee.employment_status == employment_status)
+    if q:
+        like = f"%{q}%"
+        stmt = stmt.where(or_(Employee.full_name.ilike(like), Employee.designation.ilike(like), Employee.biometric_id.ilike(like)))
+    stmt = stmt.order_by(Employee.full_name)
+    result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_employee(session: AsyncSession, employee_id: uuid.UUID) -> Employee:
+    employee = await session.get(Employee, employee_id)
+    if not employee:
+        raise NotFoundError("Employee not found")
+    return employee
+
+
+async def update_employee(session: AsyncSession, employee_id: uuid.UUID, data: EmployeeUpdate, *, actor_id: uuid.UUID, actor_role: str) -> Employee:
+    employee = await get_employee(session, employee_id)
+    changes = data.model_dump(exclude_unset=True)
+    for k, v in changes.items():
+        setattr(employee, k, v)
+    await session.flush()
+    await record_audit_event(
+        session, actor_id=actor_id, actor_role=actor_role, action="hr.employee_updated",
+        entity_type="Employee", entity_id=str(employee.id),
+        after_state={k: (v.value if hasattr(v, "value") else v) for k, v in changes.items()},
+    )
+    return employee
+
+
+async def set_employee_active(session: AsyncSession, employee_id: uuid.UUID, active: bool, *, actor_id: uuid.UUID, actor_role: str) -> Employee:
+    employee = await get_employee(session, employee_id)
+    employee.employment_status = EmploymentStatus.ACTIVE if active else EmploymentStatus.INACTIVE
+    await session.flush()
+    await record_audit_event(
+        session, actor_id=actor_id, actor_role=actor_role,
+        action="hr.employee_activated" if active else "hr.employee_deactivated",
+        entity_type="Employee", entity_id=str(employee.id), after_state={"employment_status": employee.employment_status.value},
+    )
+    return employee
 
 
 async def list_leave_requests(session: AsyncSession) -> list[LeaveRequest]:

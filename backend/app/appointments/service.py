@@ -11,6 +11,7 @@ from app.appointments.models import (
     AppointmentBatch,
     AppointmentHistory,
     AppointmentStatus,
+    AppointmentStatusEvent,
 )
 from app.appointments.schemas import AppointmentCreate, AppointmentListParams
 from app.audit.service import record_audit_event
@@ -187,6 +188,12 @@ async def transition_status(
     if new_status in (AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW):
         appt.cancellation_reason = reason
 
+    await session.flush()
+
+    session.add(AppointmentStatusEvent(
+        appointment_id=appt.id, from_status=before_status, to_status=new_status,
+        changed_at=now, changed_by_id=actor_id,
+    ))
     await session.flush()
 
     await record_audit_event(

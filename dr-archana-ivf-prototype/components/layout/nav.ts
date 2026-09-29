@@ -25,6 +25,7 @@ import {
   Dna,
   MessageCircle,
   QrCode,
+  Contact,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -40,7 +41,7 @@ export const NAV: NavItem[] = [
   // ---------------- CLINICAL ----------------
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, section: 'Clinical', roles: ['doctor', 'management'] },
   { id: 'patients', label: 'Patients', icon: Users, section: 'Clinical', roles: ['doctor', 'receptionist', 'management', 'pharmacist', 'prescription'] },
-  { id: 'registration', label: 'Register Couple', icon: UserPlus, section: 'Clinical', roles: ['doctor', 'receptionist'] },
+  { id: 'registration', label: 'Register Couple', icon: UserPlus, section: 'Clinical', roles: ['doctor'] },
   { id: 'appointments', label: 'Appointments', icon: CalendarClock, section: 'Clinical', roles: ['doctor', 'receptionist', 'management', 'prescription'] },
   { id: 'timeline', label: 'Clinical Timeline', icon: GitBranch, section: 'Clinical', roles: ['doctor', 'embryologist'] },
   { id: 'monitoring', label: 'Stimulation & Monitoring', icon: Activity, section: 'Clinical', roles: ['doctor', 'embryologist'], badge: 2 },
@@ -55,9 +56,9 @@ export const NAV: NavItem[] = [
   { id: 'donors', label: 'Donor Management', icon: Dna, section: 'Laboratory', roles: ['doctor', 'embryologist'] },
 
   // ---------------- OPERATIONS ----------------
-  { id: 'pharmacy', label: 'Pharmacy', icon: Pill, section: 'Operations', roles: ['receptionist', 'management', 'doctor', 'pharmacist'] },
+  { id: 'pharmacy', label: 'Pharmacy', icon: Pill, section: 'Operations', roles: ['management', 'doctor', 'pharmacist'] },
   { id: 'inventory', label: 'Inventory', icon: Boxes, section: 'Operations', roles: ['embryologist', 'management', 'pharmacist'] },
-  { id: 'billing', label: 'Billing & Packages', icon: Receipt, section: 'Operations', roles: ['doctor', 'receptionist', 'management'] },
+  { id: 'billing', label: 'Billing & Packages', icon: Receipt, section: 'Operations', roles: ['doctor', 'management'] },
   { id: 'messaging', label: 'Patient Messaging', icon: MessageCircle, section: 'Operations', roles: ['receptionist', 'management', 'doctor'] },
   { id: 'accounting', label: 'Accounting', icon: Wallet, section: 'Operations', roles: ['management'] },
   { id: 'staff', label: 'Staff Management', icon: Users2, section: 'Operations', roles: ['management'] },
@@ -68,6 +69,13 @@ export const NAV: NavItem[] = [
   { id: 'audit', label: 'Audit Log', icon: ScrollText, section: 'Management', roles: ['doctor', 'management'] },
   { id: 'assets', label: 'Asset & Item Tracking', icon: QrCode, section: 'Management', roles: ['management'] },
   { id: 'administration', label: 'Administration', icon: Settings, section: 'Management', roles: ['management'] },
+
+  // ---------------- HR ----------------
+  // A single nav entry: HR.tsx renders its own internal sidebar/tabs for
+  // Employees/Attendance/Payroll/Patient Flow/Delays/Reports/Settings
+  // (spec's "HR dashboard should have its own navigation") rather than
+  // each becoming a separate top-level ScreenId here.
+  { id: 'hr', label: 'HR Dashboard', icon: Contact, section: 'Management', roles: ['hr'] },
 ];
 
 export const SECTIONS = ['Clinical', 'Laboratory', 'Operations', 'Management'];
@@ -120,6 +128,16 @@ export function canAccess(role: Role, screen: ScreenId, permissions?: string[]) 
     const patientsItem = NAV.find((n) => n.id === 'patients');
     return patientsItem ? hasAccess(patientsItem, role, permissions) : false;
   }
+  // Registration has no sidebar entry for Front Office (the Patient
+  // Registry page already has its own "Register Couple" button — a
+  // sidebar shortcut to the same screen was a redundant second entry
+  // point), but the button itself must still work: access is derived
+  // from 'patients' the same way 'workspace' is above, rather than
+  // registration's own (now doctor-only) roles list.
+  if (screen === 'registration') {
+    const patientsItem = NAV.find((n) => n.id === 'patients');
+    return patientsItem ? hasAccess(patientsItem, role, permissions) : false;
+  }
   // Interface preferences are personal, not clinical — every role has them.
   if (screen === 'settings') return true;
   const item = NAV.find((n) => n.id === screen);
@@ -153,4 +171,5 @@ export const SCREEN_TITLES: Record<ScreenId, string> = {
   messaging: 'Patient Messaging',
   assets: 'Asset & Item Tracking',
   settings: 'User Interface Settings',
+  hr: 'HR Dashboard',
 };

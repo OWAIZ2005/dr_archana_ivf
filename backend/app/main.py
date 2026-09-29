@@ -119,6 +119,13 @@ from app.cryostorage.router import router as cryostorage_router
 from app.donor.router import router as donor_router
 from app.embryology.router import router as embryology_router
 from app.hr.router import router as hr_router
+from app.hr.attendance import router as hr_attendance_router
+from app.hr.payroll import router as hr_payroll_router
+from app.hr.process import router as hr_process_router
+from app.hr.settings import router as hr_settings_router
+from app.hr.alerts import router as hr_alerts_router
+from app.hr.dashboard import router as hr_dashboard_router
+from app.hr.reports import router as hr_reports_router
 from app.inventory.router import router as inventory_router
 from app.ivf.router import router as ivf_router
 from app.laboratory.router import router as laboratory_router
@@ -152,6 +159,8 @@ for router in (
     pharmacy_purchase_orders_router, pharmacy_settings_router, pharmacy_reports_router,
     inventory_router, purchasing_router, billing_router, accounting_router,
     assets_router, maintenance_router, quality_router, hr_router,
+    hr_attendance_router, hr_payroll_router, hr_process_router, hr_settings_router,
+    hr_alerts_router, hr_dashboard_router, hr_reports_router,
     notifications_router, printing_router, reports_router, administration_router, audit_router,
     donor_router, prescription_router, clinical_documents_router, messaging_router,
     nursing_router,

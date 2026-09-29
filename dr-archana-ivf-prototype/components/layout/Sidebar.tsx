@@ -38,16 +38,23 @@ export function Sidebar({
 
   const [openSections, setOpenSections] = useState<string[]>(SECTIONS);
 
+  // Front Office's menu is short enough post-cleanup (Register Couple,
+  // Pharmacy and Billing all removed — see nav.ts) that a collapse/expand
+  // toggle per section only adds clicks with nothing to hide; always show
+  // every section flat for this role instead of gating on the sidebarSections
+  // preference below.
+  const flatSections = role === 'receptionist';
+
   // In "current only" mode the menu shows one section at a time, which is
   // what keeps a 19-item list feeling like a 7-item one. Navigating to a
   // screen in another section opens that section and closes the rest.
   useEffect(() => {
-    if (prefs.sidebarSections === 'all-open') {
+    if (flatSections || prefs.sidebarSections === 'all-open') {
       setOpenSections(SECTIONS);
     } else {
       setOpenSections(activeSection ? [activeSection] : []);
     }
-  }, [prefs.sidebarSections, activeSection]);
+  }, [flatSections, prefs.sidebarSections, activeSection]);
 
   const toggleSection = (section: string) =>
     setOpenSections((cur) =>
@@ -221,10 +228,16 @@ export function Sidebar({
             if (!secItems.length) return null;
             // Collapsing only makes sense when labels are visible; in the
             // icon-only rail every item stays reachable.
-            const isOpen = collapsed || openSections.includes(section);
+            const isOpen = collapsed || flatSections || openSections.includes(section);
             return (
               <div key={section} className="mb-4 last:mb-0">
-                {!collapsed ? (
+                {collapsed ? (
+                  <div className="mx-2.5 mb-2 h-px bg-ink-200/70" />
+                ) : flatSections ? (
+                  <p className="mb-1.5 flex min-h-[36px] w-full items-center px-2.5 text-[11.5px] font-semibold uppercase tracking-[0.13em] text-ink-500">
+                    {section}
+                  </p>
+                ) : (
                   <button
                     onClick={() => toggleSection(section)}
                     aria-expanded={isOpen}
@@ -240,8 +253,6 @@ export function Sidebar({
                       className={cn('h-3.5 w-3.5 transition-transform duration-200', !isOpen && '-rotate-90')}
                     />
                   </button>
-                ) : (
-                  <div className="mx-2.5 mb-2 h-px bg-ink-200/70" />
                 )}
                 {isOpen && (
                   <div className="space-y-0.5">

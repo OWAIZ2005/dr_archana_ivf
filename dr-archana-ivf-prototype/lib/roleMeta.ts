@@ -17,6 +17,7 @@ const ROLE_CODE_MAP: Record<string, Role> = {
   it_administrator: 'management',
   pharmacist: 'pharmacist',
   prescription: 'prescription',
+  hr: 'hr',
 };
 
 export function mapRoleCode(roleCode: string): Role {
@@ -30,6 +31,7 @@ const ROLE_META: Record<Role, { title: string; accent: string }> = {
   management: { title: 'Hospital Administrator', accent: 'from-amber-500 to-orange-600' },
   pharmacist: { title: 'Pharmacist-in-Charge', accent: 'from-rose-500 to-pink-600' },
   prescription: { title: 'Prescription Department', accent: 'from-indigo-500 to-blue-700' },
+  hr: { title: 'Human Resources', accent: 'from-cyan-500 to-sky-700' },
 };
 
 function initialsOf(fullName: string): string {

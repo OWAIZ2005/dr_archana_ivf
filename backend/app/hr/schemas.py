@@ -3,7 +3,7 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict
 
-from app.hr.models import LeaveStatus
+from app.hr.models import EmploymentStatus, LeaveStatus
 
 
 class EmployeeCreate(BaseModel):
@@ -12,8 +12,25 @@ class EmployeeCreate(BaseModel):
     department: str
     designation: str
     phone: str | None = None
+    email: str | None = None
     joined_date: date
     reporting_manager_id: uuid.UUID | None = None
+    monthly_salary_rupees: int | None = None
+    working_hours_per_day: int = 8
+    biometric_id: str | None = None
+
+
+class EmployeeUpdate(BaseModel):
+    full_name: str | None = None
+    department: str | None = None
+    designation: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    reporting_manager_id: uuid.UUID | None = None
+    monthly_salary_rupees: int | None = None
+    working_hours_per_day: int | None = None
+    biometric_id: str | None = None
+    employment_status: EmploymentStatus | None = None
 
 
 class EmployeeOut(BaseModel):
@@ -23,8 +40,13 @@ class EmployeeOut(BaseModel):
     department: str
     designation: str
     phone: str | None
+    email: str | None
     joined_date: date
     leave_balance_days: int
+    employment_status: EmploymentStatus
+    monthly_salary_rupees: int | None
+    working_hours_per_day: int
+    biometric_id: str | None
 
 
 class LeaveRequestCreate(BaseModel):

@@ -140,6 +140,16 @@ PERMISSIONS: list[tuple[str, str, str, bool]] = [
     ("hr.read", "hr", "View employee directory", False),
     ("hr.write", "hr", "Edit employee records", True),
     ("hr.approve_leave", "hr", "Approve/reject leave requests", False),
+    ("hr.attendance_read", "hr", "View attendance records and history", False),
+    ("hr.attendance_import", "hr", "Upload and confirm biometric attendance imports", True),
+    ("hr.attendance_finalize", "hr", "Finalize or reopen a month's attendance period", True),
+    ("hr.payroll_read", "hr", "View payroll records", False),
+    ("hr.payroll_process", "hr", "Calculate/recalculate payroll", True),
+    ("hr.payroll_approve", "hr", "Approve payroll and mark it paid", True),
+    ("hr.process_read", "hr", "View patient process flow and delays", False),
+    ("hr.process_manage", "hr", "Record a delay reason for a patient process stage", False),
+    ("hr.settings_manage", "hr", "Edit HR attendance/payroll/process-threshold settings", True),
+    ("hr.reports_export", "hr", "Export HR attendance/payroll/delay reports", False),
     # Reports
     ("reports.read", "reports", "View operational/clinical reports", False),
     ("reports.export", "reports", "Export reports", False),
@@ -196,12 +206,14 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
     ]),
     "receptionist": ("Receptionist", [
         "patients.read", "patients.create", "patients.sensitive_documents",
-        # Same-day operations only — booking, arrival, cancelling today's
-        # visit, closing it out. reminders.manage and appointments.manage_future
-        # deliberately excluded: that ahead-of-visit-day follow-up work
-        # belongs to the prescription department now, not front desk.
         "appointments.read", "appointments.create", "appointments.checkin", "appointments.cancel",
         "appointments.reschedule", "appointments.complete",
+        # Ahead-of-visit-day follow-up work (future appointments, reminders)
+        # is owned day-to-day by the prescription department, but front
+        # desk keeps edit access here too so they can correct a mistaken
+        # entry without waiting on prescription — front desk is the
+        # fallback, not the primary owner, of this workload.
+        "appointments.manage_future", "reminders.manage",
         "communications.create",
         "billing.read", "billing.create", "billing.payment",
         "pharmacy.read",
@@ -259,11 +271,26 @@ ROLE_DEFAULTS: dict[str, tuple[str, list[str]]] = {
         "pharmacy.read", "pharmacy.indent_request", "pharmacy.po_approve",
         "inventory.read", "purchasing.read", "purchasing.approve",
         "hr.read", "hr.approve_leave",
+        "hr.attendance_read", "hr.payroll_read", "hr.process_read",
         "reports.read", "reports.export", "reports.generate",
         "audit.read",
         "maintenance.read", "quality.read",
         "assets.read", "assets.register", "assets.move",
         "dashboard.view",
+    ]),
+    "hr": ("Human Resources", [
+        # Deliberately no patients.read / clinical.* / appointments.* write
+        # access — spec §23: HR gets employee, attendance, payroll and
+        # operational patient-flow visibility, never medical records. The
+        # patient-process endpoints (app/hr/process.py) return only
+        # patient_id/name and stage timestamps regardless of what the
+        # caller's role can otherwise see, so this role doesn't need
+        # patients.read to use them.
+        "hr.read", "hr.write", "hr.approve_leave",
+        "hr.attendance_read", "hr.attendance_import", "hr.attendance_finalize",
+        "hr.payroll_read", "hr.payroll_process", "hr.payroll_approve",
+        "hr.process_read", "hr.process_manage",
+        "hr.settings_manage", "hr.reports_export",
     ]),
     "chief_consultant": ("Chief Consultant", [
         # Everything a doctor has, plus the restricted treatment protocol.

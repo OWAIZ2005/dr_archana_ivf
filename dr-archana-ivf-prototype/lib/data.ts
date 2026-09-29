@@ -4,7 +4,7 @@
 // re-pointed at live endpoints without refactoring.
 // ============================================================
 
-export type Role = 'doctor' | 'receptionist' | 'embryologist' | 'management' | 'pharmacist' | 'prescription';
+export type Role = 'doctor' | 'receptionist' | 'embryologist' | 'management' | 'pharmacist' | 'prescription' | 'hr';
 
 export type StatusTone =
   | 'active'
@@ -87,6 +87,16 @@ export const USERS: Record<Role, StaffUser> = {
     email: 'kavitha@drarchanaivf.in',
     department: 'Prescription Department',
     accent: 'from-indigo-500 to-blue-700',
+  },
+  hr: {
+    id: 'DAIVF-STAFF-017',
+    role: 'hr',
+    name: 'Priyanka Rajan',
+    title: 'Human Resources',
+    initials: 'PR',
+    email: 'hr@drarchanaivf.in',
+    department: 'Human Resources',
+    accent: 'from-cyan-500 to-sky-700',
   },
 };
 
@@ -869,6 +879,11 @@ export const ROLE_MATRIX: Record<Role, { allowed: string[]; restricted: string[]
     summary: 'Ahead-of-visit-day appointment follow-up — future appointments, reminders, and closing out same-day visits.',
     allowed: ['Future Appointments', 'Patient Reminders', 'Contact Attempt Logging', 'Mark Visit Completed'],
     restricted: ['Booking New Appointments', 'Clinical Notes', 'Billing', 'Management Reports'],
+  },
+  hr: {
+    summary: 'Staff attendance, payroll and patient-process oversight — no clinical or financial-accounting access.',
+    allowed: ['Employee Directory', 'Leave Approval', 'Biometric Attendance Import', 'Monthly Attendance & Finalization', 'Payroll Calculation & Approval', 'Patient Process Flow', 'HR Settings'],
+    restricted: ['Clinical Notes', 'Treatment Plans', 'Patient Billing', 'Accounting Configuration'],
   },
 };
 

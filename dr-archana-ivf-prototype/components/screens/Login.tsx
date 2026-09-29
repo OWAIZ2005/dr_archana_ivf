@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Pill,
   ClipboardList,
+  Contact,
 } from 'lucide-react';
 
 const AUTH_STEPS = [
@@ -41,6 +42,7 @@ const ROLE_CARDS: { role: Role; label: string; desc: string; icon: any; email: s
   { role: 'management', label: 'Management', desc: 'Operations, revenue & analytics', icon: Sparkles, email: 'rajesh@drarchanaivf.in' },
   { role: 'pharmacist', label: 'Pharmacy', desc: 'Medicines, vendors, purchases & stock', icon: Pill, email: 'ganesh@drarchanaivf.in' },
   { role: 'prescription', label: 'Prescription Dept.', desc: 'Future appointments, reminders & visit closure', icon: ClipboardList, email: 'kavitha@drarchanaivf.in' },
+  { role: 'hr', label: 'Human Resources', desc: 'Employees, attendance, payroll & operations', icon: Contact, email: 'hr@drarchanaivf.in' },
 ];
 
 const DEMO_PASSWORD = 'ChangeMe123!';

@@ -25,6 +25,7 @@ DEMO_STAFF = [
     ("management", "DAIVF-STAFF-002", "Rajesh Venkatesan", "rajesh@drarchanaivf.in", "Operations & Finance"),
     ("pharmacist", "DAIVF-STAFF-015", "Ganesh Prabhu", "ganesh@drarchanaivf.in", "Pharmacy"),
     ("prescription", "DAIVF-STAFF-016", "Kavitha Suresh", "kavitha@drarchanaivf.in", "Prescription Department"),
+    ("hr", "DAIVF-STAFF-017", "Priyanka Rajan", "hr@drarchanaivf.in", "Human Resources"),
     ("administrator", "DAIVF-STAFF-000", "System Administrator", "admin@drarchanaivf.in", "IT"),
 ]
 
@@ -292,16 +293,17 @@ async def seed_master_data(session) -> None:
     ])
 
     employees = [
-        Employee(full_name="Dr. Archana S. Ayyanathan", department="Reproductive Medicine", designation="Chief Consultant", phone="+91 98400 11223", joined_date=date(2014, 1, 2), leave_balance_days=12),
-        Employee(full_name="Dr. Kavya Raghunathan", department="Reproductive Medicine", designation="IVF Consultant", phone="+91 98400 22334", joined_date=date(2020, 3, 14), leave_balance_days=9),
-        Employee(full_name="Dr. Meera Kapoor", department="Embryology Laboratory", designation="Senior Embryologist", phone="+91 98400 33445", joined_date=date(2019, 6, 5), leave_balance_days=14),
-        Employee(full_name="Anand Kumar", department="Embryology Laboratory", designation="Lab Technician", phone="+91 98400 44556", joined_date=date(2021, 8, 20), leave_balance_days=8),
-        Employee(full_name="Lakshmi Narayanan", department="Patient Services", designation="Front Office Executive", phone="+91 98400 55667", joined_date=date(2022, 11, 11), leave_balance_days=6),
-        Employee(full_name="Divya Sundaresan", department="Nursing", designation="Staff Nurse", phone="+91 98400 66778", joined_date=date(2021, 2, 3), leave_balance_days=4),
-        Employee(full_name="Ganesh Prabhu", department="Pharmacy", designation="Pharmacist", phone="+91 98400 77889", joined_date=date(2020, 9, 17), leave_balance_days=10),
-        Employee(full_name="Rajesh Venkatesan", department="Operations & Finance", designation="Hospital Administrator", phone="+91 98400 88990", joined_date=date(2014, 1, 1), leave_balance_days=15),
-        Employee(full_name="Swathi Ramesh", department="Accounts", designation="Accountant", phone="+91 98400 99001", joined_date=date(2023, 7, 8), leave_balance_days=3),
-        Employee(full_name="Karthik Balan", department="Inventory", designation="Store & Inventory Manager", phone="+91 98400 10112", joined_date=date(2022, 4, 25), leave_balance_days=7),
+        Employee(full_name="Dr. Archana S. Ayyanathan", department="Reproductive Medicine", designation="Chief Consultant", phone="+91 98400 11223", joined_date=date(2014, 1, 2), leave_balance_days=12, biometric_id="BIO-001", monthly_salary_rupees=180000),
+        Employee(full_name="Dr. Kavya Raghunathan", department="Reproductive Medicine", designation="IVF Consultant", phone="+91 98400 22334", joined_date=date(2020, 3, 14), leave_balance_days=9, biometric_id="BIO-002", monthly_salary_rupees=95000),
+        Employee(full_name="Dr. Meera Kapoor", department="Embryology Laboratory", designation="Senior Embryologist", phone="+91 98400 33445", joined_date=date(2019, 6, 5), leave_balance_days=14, biometric_id="BIO-003", monthly_salary_rupees=85000),
+        Employee(full_name="Anand Kumar", department="Embryology Laboratory", designation="Lab Technician", phone="+91 98400 44556", joined_date=date(2021, 8, 20), leave_balance_days=8, biometric_id="BIO-004", monthly_salary_rupees=32000),
+        Employee(full_name="Lakshmi Narayanan", department="Patient Services", designation="Front Office Executive", phone="+91 98400 55667", joined_date=date(2022, 11, 11), leave_balance_days=6, biometric_id="BIO-005", monthly_salary_rupees=28000),
+        Employee(full_name="Divya Sundaresan", department="Nursing", designation="Staff Nurse", phone="+91 98400 66778", joined_date=date(2021, 2, 3), leave_balance_days=4, biometric_id="BIO-006", monthly_salary_rupees=30000),
+        Employee(full_name="Ganesh Prabhu", department="Pharmacy", designation="Pharmacist", phone="+91 98400 77889", joined_date=date(2020, 9, 17), leave_balance_days=10, biometric_id="BIO-007", monthly_salary_rupees=38000),
+        Employee(full_name="Rajesh Venkatesan", department="Operations & Finance", designation="Hospital Administrator", phone="+91 98400 88990", joined_date=date(2014, 1, 1), leave_balance_days=15, biometric_id="BIO-008", monthly_salary_rupees=65000),
+        Employee(full_name="Swathi Ramesh", department="Accounts", designation="Accountant", phone="+91 98400 99001", joined_date=date(2023, 7, 8), leave_balance_days=3, biometric_id="BIO-009", monthly_salary_rupees=27000),
+        Employee(full_name="Karthik Balan", department="Inventory", designation="Store & Inventory Manager", phone="+91 98400 10112", joined_date=date(2022, 4, 25), leave_balance_days=7, biometric_id="BIO-010", monthly_salary_rupees=33000),
+        Employee(full_name="Priyanka Rajan", department="HR", designation="HR Executive", phone="+91 98400 12121", joined_date=date(2023, 1, 16), leave_balance_days=10, biometric_id="BIO-011", monthly_salary_rupees=34000),
     ]
     session.add_all(employees)
     await session.flush()

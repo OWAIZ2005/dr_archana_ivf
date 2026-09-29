@@ -16,7 +16,12 @@ from app.cryostorage import models as _cryostorage_models  # noqa: F401
 from app.donor import models as _donor_models  # noqa: F401
 from app.embryology import models as _embryology_models  # noqa: F401
 from app.events import models as _events_models  # noqa: F401
+from app.hr import alerts as _hr_alerts_models  # noqa: F401
+from app.hr import attendance as _hr_attendance_models  # noqa: F401
 from app.hr import models as _hr_models  # noqa: F401
+from app.hr import payroll as _hr_payroll_models  # noqa: F401
+from app.hr import process as _hr_process_models  # noqa: F401
+from app.hr import settings as _hr_settings_models  # noqa: F401
 from app.inventory import models as _inventory_models  # noqa: F401
 from app.ivf import models as _ivf_models  # noqa: F401
 from app.laboratory import models as _laboratory_models  # noqa: F401
